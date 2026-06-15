@@ -46,6 +46,7 @@
     <label class="ck" id="editwrap" style="display:none;"><input type="checkbox" id="t-edit"> ✏️ Modo edición (DM)</label>
     <button class="btn" id="saveprog">💾 Guardar progreso</button>
     <button class="btn dm" id="savelogros" style="display:none;">💾 Guardar logros</button>
+    <button class="btn dm" id="tokenbtn" style="display:none;" title="Token de GitHub para guardar automáticamente">🔑 Token</button>
     <button class="btn" id="reset">Reiniciar</button>
     <span class="whoami" id="whoami"></span>
     <button class="btn" id="logout">Salir</button>
@@ -215,12 +216,43 @@ function copyText(txt,msg){
     navigator.clipboard.writeText(txt).then(function(){alert(msg);}).catch(function(){window.prompt("Copia este texto:",txt);});
   }else{window.prompt("Copia este texto:",txt);}
 }
+function getToken(){try{return localStorage.getItem("rdr2_gh_token")||"";}catch(e){return "";}}
+function setTokenPrompt(){
+  var cur=getToken();
+  var v=window.prompt(cur?"Ya hay un token guardado. Pega uno nuevo para cambiarlo, o deja vacío para borrarlo:":"Pega tu token de GitHub (con permiso de escritura en el repo). Se guarda SOLO en este navegador, nunca en la web:","");
+  if(v===null)return; v=v.trim();
+  try{ if(v)localStorage.setItem("rdr2_gh_token",v); else localStorage.removeItem("rdr2_gh_token"); }catch(e){}
+  alert(v?"Token guardado en este navegador. Ya puedes usar los botones de Guardar y se subirá solo.":"Token borrado.");
+}
+function b64utf8(s){return btoa(unescape(encodeURIComponent(s)));}
+function ghCommit(path,text,msg,t){
+  var base="https://api.github.com/repos/Jowy05/logros-rol-de-rol-2/contents/"+path;
+  var h={"Authorization":"Bearer "+t,"Accept":"application/vnd.github+json"};
+  return fetch(base,{headers:h}).then(function(r){return r.ok?r.json():null;}).then(function(ex){
+    var body={message:msg,content:b64utf8(text)};
+    if(ex&&ex.sha)body.sha=ex.sha;
+    return fetch(base,{method:"PUT",headers:h,body:JSON.stringify(body)}).then(function(r){if(!r.ok)return r.text().then(function(tx){throw new Error(r.status+" "+tx.slice(0,140));});return r.json();});
+  });
+}
+function doSave(path,text,okmsg){
+  if(currentUser===DM){
+    var t=getToken();
+    if(!t){ var v=(window.prompt("Para guardar automáticamente, pega tu token de GitHub (permiso de escritura en el repo). Se guarda SOLO en este navegador:","")||"").trim(); if(v){try{localStorage.setItem("rdr2_gh_token",v);}catch(e){} t=v;} }
+    if(t){
+      ghCommit(path,text,"Actualizar "+path+" desde la app",t)
+        .then(function(){alert(okmsg);})
+        .catch(function(e){alert("No se pudo guardar en GitHub ("+e.message+"). Revisa el token (permiso de escritura). Te copio el contenido para pegarlo a mano.");copyText(text,"Pega esto en "+path+" del repo y haz commit.");});
+      return;
+    }
+  }
+  copyText(text,"Copiado. Pega esto en "+path+" del repositorio y haz commit.");
+}
 function copyProgress(){
   var slugs=Object.keys(unlocked).filter(function(k){return unlocked[k];}).sort();
-  copyText(JSON.stringify({completados:slugs},null,2),"Progreso copiado ("+slugs.length+" logros). Pegalo en progreso.json del repositorio y haz commit; en 1-2 min lo vera el grupo.");
+  doSave("progreso.json",JSON.stringify({completados:slugs},null,2),"✅ Progreso guardado en GitHub ("+slugs.length+" logros). En 1-2 min lo ve el grupo (Ctrl+F5).");
 }
 function copyLogros(){
-  copyText(JSON.stringify(LOGROS,null,2),"Logros copiados ("+LOGROS.length+"). Pegalo en logros.json del repositorio y haz commit para que el grupo vea los cambios y las recompensas.");
+  doSave("logros.json",JSON.stringify(LOGROS,null,2),"✅ Logros guardados en GitHub ("+LOGROS.length+"). En 1-2 min lo ve el grupo (Ctrl+F5).");
 }
 
 function deleteLogro(l){
@@ -333,12 +365,13 @@ function openGuia(){
 }
 function closeGuia(){ document.getElementById("guia-modal").classList.remove("open"); }
 function toggleGuiaEdit(){ if(guiaEditing){ guiaMD=document.getElementById("guia-edit").value; guiaEditing=false; } else { guiaEditing=true; } renderGuia(); }
-function saveGuia(){ if(guiaEditing) guiaMD=document.getElementById("guia-edit").value; copyText(guiaMD||"","Guia copiada. Pegala en guia.md del repositorio y haz commit; en 1-2 min se actualiza."); }
+function saveGuia(){ if(guiaEditing) guiaMD=document.getElementById("guia-edit").value; doSave("guia.md",guiaMD||"","✅ Guía guardada en GitHub. En 1-2 min se actualiza (Ctrl+F5)."); }
 
 function render(){
   document.getElementById("editwrap").style.display=(currentUser===DM)?"flex":"none";
   document.getElementById("savelogros").style.display=(currentUser===DM&&editMode)?"inline-block":"none";
   document.getElementById("dm-fab").style.display=(currentUser===DM)?"inline-flex":"none";
+  document.getElementById("tokenbtn").style.display=(currentUser===DM)?"inline-block":"none";
   renderTabs();renderList();renderGlobal();
 }
 
@@ -348,6 +381,7 @@ th.addEventListener("change",function(e){prefs.hide=e.target.checked;try{localSt
 document.getElementById("t-edit").addEventListener("change",function(e){editMode=e.target.checked;render();});
 document.getElementById("saveprog").addEventListener("click",copyProgress);
 document.getElementById("savelogros").addEventListener("click",copyLogros);
+document.getElementById("tokenbtn").addEventListener("click",setTokenPrompt);
 document.getElementById("reset").addEventListener("click",function(){
   if(confirm("¿Desmarcar todos los logros en esta vista? (no afecta al repositorio hasta que guardes el progreso)")){unlocked={};render();}
 });
