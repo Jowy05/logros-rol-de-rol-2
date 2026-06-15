@@ -23,7 +23,7 @@
 </div>
 
 <div class="wrap" id="app" style="display:none;">
-  <div class="banner" id="banner">Logros <b>por conseguir</b>, cada uno con su recompensa. Al marcar o editar <b>se guarda solo</b> y lo ve todo el grupo al instante.</div>
+  <div class="banner" id="banner">Cada jugador lleva <b>su propio progreso</b> (se guarda solo en la nube). Marca tus logros y mira cuántos los habéis conseguido. 👥</div>
 
   <div class="top">
     <div class="brand">
@@ -34,7 +34,7 @@
       </div>
     </div>
     <div class="globalbox">
-      <div class="gline"><b id="g-count">0/0</b> logros conseguidos</div>
+      <div class="gline"><b id="g-count">0/0</b> tuyos conseguidos</div>
       <div class="bar"><div class="fill" id="g-fill"></div></div>
       <div class="perfect" id="g-perfect"></div>
     </div>
@@ -42,9 +42,15 @@
 
   <div class="controls">
     <input type="text" id="search" placeholder="🔍  Buscar logro...">
-    <label class="ck"><input type="checkbox" id="t-hide"> Ocultar conseguidos</label>
+    <select id="filtro">
+      <option value="todos">Todos</option>
+      <option value="pend">Pendientes</option>
+      <option value="hechos">Conseguidos</option>
+    </select>
     <label class="ck" id="editwrap" style="display:none;"><input type="checkbox" id="t-edit"> ✏️ Modo edición (DM)</label>
-    <span id="savestatus" style="font-size:12px;color:#9fd3a0;min-width:80px;"></span>
+    <button class="btn dm" id="resumenbtn" style="display:none;">📊 Resumen</button>
+    <span id="savestatus" style="font-size:12px;color:#9fd3a0;min-width:74px;"></span>
+    <button class="btn" id="reset">Reiniciar</button>
     <span class="whoami" id="whoami"></span>
     <button class="btn" id="logout">Salir</button>
   </div>
@@ -53,10 +59,11 @@
   <div id="subtabs"></div>
   <main id="list"></main>
 
-  <div class="foot">Progreso compartido en la nube (Firebase): lo que marca o edita uno, lo ven todos. Se guarda automáticamente.</div>
+  <div class="foot">Progreso por jugador, en la nube (Firebase). Se guarda solo. El conteo 👥 se actualiza al recargar.</div>
 </div>
 
 <button class="dm-fab" id="dm-fab" type="button">📖 Guía / Editar</button>
+
 <div class="modal" id="guia-modal">
   <div class="modal-card">
     <div class="modal-head">
@@ -72,6 +79,16 @@
   </div>
 </div>
 
+<div class="modal" id="resumen-modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>📊 Resumen de campaña</h2>
+      <button class="btn" id="resumen-close" type="button">✕ Cerrar</button>
+    </div>
+    <div class="modal-body" id="resumen-body"></div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
 <script>
 const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.app";
@@ -80,30 +97,28 @@ const PLAYERS=[
   {key:"Cristina",icon:"🐉"},
   {key:"Carol",icon:"✨"},
   {key:"Leomar",icon:"💀"},
-  {key:"Uriol",icon:"⛑️"}
+  {key:"Oriol",icon:"⛑️"}
 ];
-
-// CREDENCIALES: hash SHA-256 (no la contraseña en claro). Cambiar: sha256hex('clave') en consola.
 const USERS={
   "Joel":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
   "Cristina":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
   "Carol":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
   "Leomar":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
-  "Uriol":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
+  "Oriol":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
   "Didac":"a2fc86bac4cec78448d73cbd19b5e77df108a861a5d553ac1a6663fa8069cfeb"
 };
 const DM="Didac";
 
-let LOGROS=[], unlocked={}, currentUser="", editMode=false;
-var guiaMD=null, guiaEditing=false;
-const PREFS="rdr2_prefs_v2", SESSION="rdr2_session";
-let prefs={hide:false};
+let LOGROS=[], unlocked={}, allProgreso={}, currentUser="", editMode=false;
+var guiaMD=null, guiaEditing=false, dragSrc=null;
+const PREFS="rdr2_prefs_v3", SESSION="rdr2_session";
+let prefs={filtro:"todos"};
 try{prefs=Object.assign(prefs,JSON.parse(localStorage.getItem(PREFS))||{});}catch(e){}
-let state={tab:"grupo",sub:"todos",search:""};
+let state={tab:"grupo",sub:"todos",search:"",filtro:prefs.filtro||"todos"};
 var saveTimers={};
 
 const CAT_ICON={grupo:"🤝",combate:"⚔️",exploracion:"🗺️",social:"💬",botin:"💰",meme:"🤡",general:"🎯"};
-const PLAYER_ICON={Joel:"🦖",Cristina:"🐉",Carol:"✨",Leomar:"💀",Uriol:"⛑️"};
+const PLAYER_ICON={Joel:"🦖",Cristina:"🐉",Carol:"✨",Leomar:"💀",Oriol:"⛑️"};
 const ICON_RULES=[
   [["casco"],"⛑️"],
   [["pergamino","orden de gm","orden gm"],"📜"],
@@ -152,6 +167,7 @@ function getIcon(l){
   if(l.personaje&&PLAYER_ICON[l.personaje])return PLAYER_ICON[l.personaje];
   return CAT_ICON[l.categoria]||"⭐";
 }
+function fmtFecha(iso){ try{var d=new Date(iso);return ("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2)+"/"+d.getFullYear();}catch(e){return "";} }
 
 function utf8bytes(str){
   if(typeof TextEncoder!=="undefined")return new TextEncoder().encode(str);
@@ -193,64 +209,84 @@ function viewLogros(){
   return LOGROS.filter(function(l){return l.personaje===state.sub;});
 }
 function stats(arr){var u=0;arr.forEach(function(l){if(unlocked[slug(l.nombre)])u++;});return{u:u,t:arr.length};}
+function aggCount(sl){var n=0;PLAYERS.forEach(function(p){var pr=allProgreso[p.key];if(pr&&pr[sl])n++;});return n;}
+function nombreOf(id){for(var i=0;i<LOGROS.length;i++){if(slug(LOGROS[i].nombre)===id)return LOGROS[i].nombre;}return id;}
 
 function setStatus(t){var s=document.getElementById("savestatus");if(s)s.textContent=t;}
-function fbPut(path,value){
-  return fetch(FB+"/estado/"+path+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(value)});
-}
-function saveProgreso(){
-  var slugs=Object.keys(unlocked).filter(function(k){return unlocked[k];}).sort();
-  setStatus("Guardando…");
-  fbPut("progreso",{completados:slugs}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error al guardar");}).catch(function(){setStatus("⚠ Sin conexión");});
-}
-function saveLogros(){
-  setStatus("Guardando…");
-  fbPut("logros",LOGROS).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error al guardar");}).catch(function(){setStatus("⚠ Sin conexión");});
-}
-function saveGuia(){
-  if(guiaEditing) guiaMD=document.getElementById("guia-edit").value;
-  setStatus("Guardando…");
-  fbPut("guia",guiaMD||"").then(function(r){setStatus(r.ok?"✓ Guía guardada":"⚠ Error al guardar");alert(r.ok?"✅ Guía guardada para todo el grupo.":"⚠ No se pudo guardar la guía.");}).catch(function(){setStatus("⚠ Sin conexión");});
-}
-function debounce(key,fn){ if(saveTimers[key])clearTimeout(saveTimers[key]); saveTimers[key]=setTimeout(fn,700); }
+function fbMark(user,sl,date){setStatus("Guardando…");return fetch(FB+"/estado/progreso/"+encodeURIComponent(user)+"/"+sl+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(date)}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});}
+function fbUnmark(user,sl){setStatus("Guardando…");return fetch(FB+"/estado/progreso/"+encodeURIComponent(user)+"/"+sl+".json",{method:"DELETE"}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});}
+function saveLogros(){setStatus("Guardando…");fetch(FB+"/estado/logros.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(LOGROS)}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});}
+function saveGuia(){if(guiaEditing)guiaMD=document.getElementById("guia-edit").value;setStatus("Guardando…");fetch(FB+"/estado/guia.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(guiaMD||"")}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");alert(r.ok?"✅ Guía guardada para todo el grupo.":"⚠ No se pudo guardar.");}).catch(function(){setStatus("⚠ Sin conexión");});}
+function debounce(key,fn){if(saveTimers[key])clearTimeout(saveTimers[key]);saveTimers[key]=setTimeout(fn,700);}
 
 function loadData(){
   setStatus("Cargando…");
   fetch(FB+"/estado.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(est){
     if(est&&est.logros){
       LOGROS=toArr(est.logros);
-      unlocked={};
-      var comp=(est.progreso&&est.progreso.completados)?toArr(est.progreso.completados):[];
-      comp.forEach(function(s){if(s)unlocked[s]=1;});
+      allProgreso=est.progreso||{};
+      unlocked=allProgreso[currentUser]||{};
       guiaMD=(typeof est.guia==="string")?est.guia:guiaMD;
-      setStatus("");
-      render();
+      setStatus("");render();
     } else { gitFallback(); }
   }).catch(function(){ gitFallback(); });
 }
 function gitFallback(){
   setStatus("⚠ Sin conexión con la nube (modo lectura)");
-  Promise.all([
-    fetch("logros.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():[];}).catch(function(){return [];}),
-    fetch("progreso.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;})
-  ]).then(function(res){
-    LOGROS=res[0]||[]; unlocked={};
-    if(res[1]&&res[1].completados)res[1].completados.forEach(function(s){unlocked[s]=1;});
-    render();
-  });
+  fetch("logros.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():[];}).catch(function(){return [];}).then(function(a){LOGROS=a||[];unlocked={};allProgreso={};render();});
+}
+
+function celebrate(nombre){ toast(nombre); playSound(); confetti(); }
+function toast(nombre){
+  var t=document.createElement("div");t.className="toast";
+  t.innerHTML='<div class="toast-ico">🏆</div><div><div class="toast-t">¡Logro desbloqueado!</div><div class="toast-n">'+esc(nombre)+'</div></div>';
+  document.body.appendChild(t);
+  setTimeout(function(){t.classList.add("show");},20);
+  setTimeout(function(){t.classList.remove("show");setTimeout(function(){t.remove();},420);},3200);
+}
+function playSound(){
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext; if(!AC)return;
+    var ctx=new AC(),notes=[523.25,659.25,783.99,1046.5];
+    notes.forEach(function(f,i){
+      var o=ctx.createOscillator(),g=ctx.createGain();o.type="triangle";o.frequency.value=f;
+      o.connect(g);g.connect(ctx.destination);
+      var t=ctx.currentTime+i*0.10;
+      g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.22,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+0.26);
+      o.start(t);o.stop(t+0.28);
+    });
+  }catch(e){}
+}
+function confetti(){
+  var colors=["#f0c33c","#66c0f4","#a4d007","#ff6b6b","#a653ff","#ffffff"];
+  for(var i=0;i<42;i++){
+    var d=document.createElement("div");d.className="confetti";
+    d.style.left=(Math.random()*100)+"vw";
+    d.style.background=colors[i%colors.length];
+    d.style.animationDelay=(Math.random()*0.25)+"s";
+    d.style.animationDuration=(1.6+Math.random()*0.9)+"s";
+    document.body.appendChild(d);
+    (function(el){setTimeout(function(){el.remove();},2700);})(d);
+  }
 }
 
 function toggle(id){
   var y=window.scrollY;
-  if(unlocked[id])delete unlocked[id];else unlocked[id]=1;
-  render();window.scrollTo(0,y);
-  debounce("p",saveProgreso);
+  if(unlocked[id]){ delete unlocked[id]; fbUnmark(currentUser,id); allProgreso[currentUser]=unlocked; render(); window.scrollTo(0,y); }
+  else { var d=new Date().toISOString(); unlocked[id]=d; fbMark(currentUser,id,d); allProgreso[currentUser]=unlocked; render(); window.scrollTo(0,y); celebrate(nombreOf(id)); }
+}
+function resetMio(){
+  if(!confirm("¿Desmarcar TODOS tus logros? (solo los tuyos)"))return;
+  unlocked={};allProgreso[currentUser]={};
+  setStatus("Guardando…");
+  fetch(FB+"/estado/progreso/"+encodeURIComponent(currentUser)+".json",{method:"DELETE"}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});
+  render();
 }
 
 function deleteLogro(l){
   if(!confirm('¿Borrar el logro "'+l.nombre+'"? Se borra para todo el grupo.'))return;
   var i=LOGROS.indexOf(l);if(i>=0)LOGROS.splice(i,1);
-  render(); saveLogros();
+  render();saveLogros();
 }
 function addLogro(){
   var n=(document.getElementById("add-nombre").value||"").trim();
@@ -260,13 +296,18 @@ function addLogro(){
   else if(state.sub!=="todos"){nuevo.categoria="pj:"+state.sub;nuevo.personaje=state.sub;}
   else{nuevo.categoria="general";}
   LOGROS.push(nuevo);
-  render(); saveLogros();
+  render();saveLogros();
+}
+function moveLogro(l,dir){
+  var view=viewLogros();var iv=view.indexOf(l);var t=iv+dir;
+  if(t<0||t>=view.length)return;
+  var other=view[t];var i1=LOGROS.indexOf(l),i2=LOGROS.indexOf(other);
+  if(i1<0||i2<0)return;
+  var tmp=LOGROS[i1];LOGROS[i1]=LOGROS[i2];LOGROS[i2]=tmp;
+  render();debounce("ord",saveLogros);
 }
 
-function mdRender(md){
-  try{ if(window.marked){ return marked.parse?marked.parse(md):marked(md); } }catch(e){}
-  return '<pre style="white-space:pre-wrap;word-break:break-word;">'+esc(md)+'</pre>';
-}
+function mdRender(md){ try{ if(window.marked){ return marked.parse?marked.parse(md):marked(md); } }catch(e){} return '<pre style="white-space:pre-wrap;word-break:break-word;">'+esc(md)+'</pre>'; }
 function renderGuia(){
   var v=document.getElementById("guia-view"),e=document.getElementById("guia-edit");
   var eb=document.getElementById("guia-edit-btn"),sb=document.getElementById("guia-save-btn");
@@ -275,21 +316,37 @@ function renderGuia(){
 }
 function openGuia(){
   document.getElementById("guia-modal").classList.add("open");
-  if(guiaMD===null){
-    document.getElementById("guia-view").innerHTML="Cargando…";
-    fetch("guia.md?x="+(new Date().getTime())).then(function(r){return r.ok?r.text():"";}).then(function(t){guiaMD=t;renderGuia();}).catch(function(){guiaMD="(No se pudo cargar la guía)";renderGuia();});
-  } else renderGuia();
+  if(guiaMD===null){ document.getElementById("guia-view").innerHTML="Cargando…"; fetch("guia.md?x="+(new Date().getTime())).then(function(r){return r.ok?r.text():"";}).then(function(t){guiaMD=t;renderGuia();}).catch(function(){guiaMD="(No se pudo cargar la guía)";renderGuia();}); }
+  else renderGuia();
 }
 function closeGuia(){ document.getElementById("guia-modal").classList.remove("open"); }
 function toggleGuiaEdit(){ if(guiaEditing){ guiaMD=document.getElementById("guia-edit").value; guiaEditing=false; } else { guiaEditing=true; } renderGuia(); }
+
+function openResumen(){
+  document.getElementById("resumen-modal").classList.add("open");
+  var body=document.getElementById("resumen-body");body.innerHTML="Cargando…";
+  fetch(FB+"/estado/progreso.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():{};}).then(function(prog){
+    prog=prog||{};
+    var total=LOGROS.length;
+    var html='<table class="resumen-table"><tr><th>Jugador</th><th>Conseguidos</th><th>Progreso</th></tr>';
+    PLAYERS.forEach(function(p){
+      var pr=prog[p.key]||{};var n=Object.keys(pr).length;var pct=total?Math.round(n/total*100):0;
+      html+='<tr><td>'+p.icon+' '+esc(p.key)+'</td><td class="num">'+n+' / '+total+'</td><td><div class="rbar"><i style="width:'+pct+'%"></i></div></td></tr>';
+    });
+    html+='</table>';
+    var tocados=0;for(var i=0;i<LOGROS.length;i++){var sl=slug(LOGROS[i].nombre);var hay=false;PLAYERS.forEach(function(p){if(prog[p.key]&&prog[p.key][sl])hay=true;});if(hay)tocados++;}
+    html+='<p style="margin-top:14px;color:var(--muted);font-size:13px;">Logros conseguidos por al menos un jugador: <b style="color:var(--accent)">'+tocados+' / '+total+'</b>.</p>';
+    body.innerHTML=html;
+  }).catch(function(){body.innerHTML="No se pudo cargar el resumen.";});
+}
+function closeResumen(){ document.getElementById("resumen-modal").classList.remove("open"); }
 
 function renderTabs(){
   var sg=stats(LOGROS.filter(function(l){return l.categoria==="grupo";}));
   var si=stats(LOGROS.filter(function(l){return l.categoria!=="grupo";}));
   var mt=document.getElementById("maintabs");mt.innerHTML="";
   [["grupo","🛡️ Grupo",sg],["ind","👤 Individuales",si]].forEach(function(row){
-    var b=document.createElement("button");
-    b.className="tab"+((state.tab===row[0])?" active":"");
+    var b=document.createElement("button");b.className="tab"+((state.tab===row[0])?" active":"");
     b.innerHTML=row[1]+'<span class="c">'+row[2].u+"/"+row[2].t+"</span>";
     b.onclick=function(){state.tab=row[0];render();};
     mt.appendChild(b);
@@ -301,9 +358,7 @@ function renderTabs(){
   var groups=[{key:"todos",icon:"🌐",label:"Para todos",arr:LOGROS.filter(function(l){return l.categoria!=="grupo"&&!isPlayer(l);})}];
   PLAYERS.forEach(function(p){groups.push({key:p.key,icon:p.icon,label:p.key,arr:LOGROS.filter(function(l){return l.personaje===p.key;})});});
   groups.forEach(function(g){
-    var s=stats(g.arr);
-    var b=document.createElement("button");
-    b.className="subtab"+((state.sub===g.key)?" active":"");
+    var s=stats(g.arr);var b=document.createElement("button");b.className="subtab"+((state.sub===g.key)?" active":"");
     b.innerHTML=g.icon+" "+g.label+'<span class="c">'+s.u+"/"+s.t+"</span>";
     b.onclick=function(){state.sub=g.key;render();};
     st.appendChild(b);
@@ -318,28 +373,42 @@ function buildAddForm(){
 }
 function buildCard(l){
   var id=slug(l.nombre),on=!!unlocked[id];
-  var div=document.createElement("div");div.className="ach"+(on?" on":"");
+  var div=document.createElement("div");div.className="ach"+(on?" on":"")+(editMode?" editing":"");
+  var ag=aggCount(id);
   var html='<div class="ic">'+getIcon(l)+(on?'<span class="vbadge">✓</span>':"")+'</div>';
-  html+='<div class="info"><div class="nm">'+esc(l.nombre)+'</div><div class="ds">'+esc(l.descripcion)+'</div>';
   if(editMode){
-    html+='<div class="rwedit">🎁 Recompensa:<input class="rw-input" type="text" value="'+esc(l.recompensa||"")+'" placeholder="(sin recompensa)"></div>';
-  }else if(l.recompensa){
-    html+='<div class="rw">🎁 '+esc(l.recompensa)+'</div>';
+    html+='<div class="movebtns"><button class="movebtn" data-d="-1" title="Subir">▲</button><button class="movebtn" data-d="1" title="Bajar">▼</button></div>';
+    html+='<div class="info"><input class="nm-input" value="'+esc(l.nombre)+'"><textarea class="ds-input" rows="2">'+esc(l.descripcion||"")+'</textarea><div class="rwedit">🎁 <input class="rw-input" value="'+esc(l.recompensa||"")+'" placeholder="Recompensa"></div></div>';
+    html+='<button class="del" type="button" title="Borrar">🗑</button>';
+  } else {
+    html+='<div class="info"><div class="nm">'+esc(l.nombre)+'</div><div class="ds">'+esc(l.descripcion)+'</div>';
+    if(l.recompensa)html+='<div class="rw">🎁 '+esc(l.recompensa)+'</div>';
+    if(on)html+='<div class="fecha">✓ Conseguido el '+fmtFecha(unlocked[id])+'</div>';
+    html+='<div class="agg">👥 <b>'+ag+'</b>/'+PLAYERS.length+' jugadores</div>';
+    html+='</div>';
   }
-  html+='</div>';
-  if(editMode)html+='<button class="del" type="button" title="Borrar logro">🗑</button>';
   html+='<label class="toggle"><input type="checkbox"'+(on?" checked":"")+'><span>'+(on?"Conseguido":"Marcar")+'</span></label>';
   div.innerHTML=html;
   div.querySelector(".toggle input").addEventListener("change",function(){toggle(id);});
   if(editMode){
+    var nm=div.querySelector(".nm-input");if(nm)nm.addEventListener("change",function(){l.nombre=nm.value;render();saveLogros();});
+    var ds=div.querySelector(".ds-input");if(ds)ds.addEventListener("change",function(){l.descripcion=ds.value;debounce("l",saveLogros);});
     var ri=div.querySelector(".rw-input");if(ri)ri.addEventListener("input",function(){l.recompensa=ri.value;debounce("l",saveLogros);});
     var db=div.querySelector(".del");if(db)db.addEventListener("click",function(){deleteLogro(l);});
+    var mb=div.querySelectorAll(".movebtn");for(var b=0;b<mb.length;b++){(function(btn){btn.addEventListener("click",function(){moveLogro(l,parseInt(btn.getAttribute("data-d"),10));});})(mb[b]);}
+    div.setAttribute("draggable","true");
+    div.addEventListener("dragstart",function(e){dragSrc=l;div.classList.add("dragging");try{e.dataTransfer.effectAllowed="move";}catch(x){}});
+    div.addEventListener("dragend",function(){dragSrc=null;div.classList.remove("dragging");var all=document.querySelectorAll(".ach");for(var i=0;i<all.length;i++)all[i].classList.remove("drag-over");});
+    div.addEventListener("dragover",function(e){e.preventDefault();div.classList.add("drag-over");});
+    div.addEventListener("dragleave",function(){div.classList.remove("drag-over");});
+    div.addEventListener("drop",function(e){e.preventDefault();div.classList.remove("drag-over");if(!dragSrc||dragSrc===l)return;var i1=LOGROS.indexOf(dragSrc);if(i1<0)return;LOGROS.splice(i1,1);var i2=LOGROS.indexOf(l);LOGROS.splice(i2,0,dragSrc);render();saveLogros();});
   }
   return div;
 }
 function renderList(){
   var arr=viewLogros();
-  if(prefs.hide&&!editMode)arr=arr.filter(function(l){return !unlocked[slug(l.nombre)];});
+  if(state.filtro==="pend")arr=arr.filter(function(l){return !unlocked[slug(l.nombre)];});
+  else if(state.filtro==="hechos")arr=arr.filter(function(l){return !!unlocked[slug(l.nombre)];});
   var q=norm(state.search);
   if(q)arr=arr.filter(function(l){return norm(l.nombre+" "+l.descripcion).indexOf(q)>=0;});
   var list=document.getElementById("list");list.innerHTML="";
@@ -352,18 +421,21 @@ function renderGlobal(){
   document.getElementById("g-count").textContent=s.u+"/"+s.t;
   var pct=s.t?Math.round(s.u/s.t*100):0;
   document.getElementById("g-fill").style.width=pct+"%";
-  document.getElementById("g-perfect").textContent=(s.u===s.t&&s.t>0)?"🏅 ¡Todos los logros conseguidos!":(pct+"% completado");
+  document.getElementById("g-perfect").textContent=(s.u===s.t&&s.t>0)?"🏅 ¡Todos tus logros conseguidos!":(pct+"% completado");
 }
 function render(){
   document.getElementById("editwrap").style.display=(currentUser===DM)?"flex":"none";
+  document.getElementById("resumenbtn").style.display=(currentUser===DM)?"inline-block":"none";
   document.getElementById("dm-fab").style.display=(currentUser===DM)?"inline-flex":"none";
   renderTabs();renderList();renderGlobal();
 }
 
 document.getElementById("search").addEventListener("input",function(e){state.search=e.target.value;renderList();});
-var th=document.getElementById("t-hide");th.checked=prefs.hide;
-th.addEventListener("change",function(e){prefs.hide=e.target.checked;try{localStorage.setItem(PREFS,JSON.stringify(prefs));}catch(x){}renderList();});
+var fsel=document.getElementById("filtro");fsel.value=state.filtro;
+fsel.addEventListener("change",function(e){state.filtro=e.target.value;prefs.filtro=state.filtro;try{localStorage.setItem(PREFS,JSON.stringify(prefs));}catch(x){}renderList();});
 document.getElementById("t-edit").addEventListener("change",function(e){editMode=e.target.checked;render();});
+document.getElementById("reset").addEventListener("click",resetMio);
+document.getElementById("resumenbtn").addEventListener("click",openResumen);
 
 function startApp(user){
   currentUser=user;editMode=false;
@@ -380,12 +452,9 @@ function doLogin(){
   var key=Object.keys(USERS).find(function(k){return norm(k)===norm(name);});
   if(key&&USERS[key]===sha256hex(pass)){
     try{localStorage.setItem(SESSION,key);}catch(e){}
-    document.getElementById("li-err").textContent="";
-    document.getElementById("li-pass").value="";
+    document.getElementById("li-err").textContent="";document.getElementById("li-pass").value="";
     startApp(key);
-  }else{
-    document.getElementById("li-err").textContent="Nombre o contraseña incorrectos.";
-  }
+  }else{ document.getElementById("li-err").textContent="Nombre o contraseña incorrectos."; }
 }
 (function(){
   var dl=document.getElementById("userlist");
@@ -399,6 +468,8 @@ function doLogin(){
   document.getElementById("guia-edit-btn").addEventListener("click",toggleGuiaEdit);
   document.getElementById("guia-save-btn").addEventListener("click",saveGuia);
   document.getElementById("guia-modal").addEventListener("click",function(e){if(e.target.id==="guia-modal")closeGuia();});
+  document.getElementById("resumen-close").addEventListener("click",closeResumen);
+  document.getElementById("resumen-modal").addEventListener("click",function(e){if(e.target.id==="resumen-modal")closeResumen();});
   var sess="";try{sess=localStorage.getItem(SESSION)||"";}catch(e){}
   if(sess&&Object.prototype.hasOwnProperty.call(USERS,sess))startApp(sess);
 })();
