@@ -134,6 +134,7 @@ const ICON_RULES=[
   [["michelin","plato","cocina","cocinar","receta","chef","guiso"],"🍳"],
   [["pocion","brebaje","herbol","hierba","alquim","botica","ingrediente","experimento","embrujo"],"🧪"],
   [["familiar"],"🐈‍⬛"],
+  [["dormir","duerm","dormid","adormec","ronquid","siesta","insomnio","despert","sueno"],"😴"],
   [["mecenas","oro","financiacion","hucha","tesoro","recompensa","monedas","regate","mercader","vender","invers"],"💰"],
   [["nigroman","no-muerto","no muerto","secuaz","minion","esqueleto","reanim","revivir","orco","sapo","marioneta"],"☠️"],
   [["bendicion","warpriest","fervor","plegaria","sagrado","divin"],"🙏"],
@@ -168,6 +169,10 @@ function getIcon(l){
   return CAT_ICON[l.categoria]||"⭐";
 }
 function fmtFecha(iso){ try{var d=new Date(iso);return ("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2)+"/"+d.getFullYear();}catch(e){return "";} }
+var DIFS=[["","— Dificultad —"],["Común","Común"],["Raro","Raro"],["Épico","Épico"],["Legendario","Legendario"]];
+function difKey(d){var n=norm(d);if(!n)return "";if(n.indexOf("legend")>=0)return "legendario";if(n.indexOf("epic")>=0)return "epico";if(n.indexOf("raro")>=0)return "raro";return "comun";}
+function difBadge(l){return l.dificultad?' <span class="dif d-'+difKey(l.dificultad)+'">'+esc(l.dificultad)+'</span>':"";}
+function difSelect(l){var s='<select class="dif-input">';for(var i=0;i<DIFS.length;i++){s+='<option value="'+esc(DIFS[i][0])+'"'+(((l.dificultad||"")===DIFS[i][0])?" selected":"")+'>'+esc(DIFS[i][1])+'</option>';}return s+'</select>';}
 
 function utf8bytes(str){
   if(typeof TextEncoder!=="undefined")return new TextEncoder().encode(str);
@@ -378,10 +383,10 @@ function buildCard(l){
   var html='<div class="ic">'+getIcon(l)+(on?'<span class="vbadge">✓</span>':"")+'</div>';
   if(editMode){
     html+='<div class="movebtns"><button class="movebtn" data-d="-1" title="Subir">▲</button><button class="movebtn" data-d="1" title="Bajar">▼</button></div>';
-    html+='<div class="info"><input class="nm-input" value="'+esc(l.nombre)+'"><textarea class="ds-input" rows="2">'+esc(l.descripcion||"")+'</textarea><div class="rwedit">🎁 <input class="rw-input" value="'+esc(l.recompensa||"")+'" placeholder="Recompensa"></div></div>';
+    html+='<div class="info"><input class="nm-input" value="'+esc(l.nombre)+'"><textarea class="ds-input" rows="2">'+esc(l.descripcion||"")+'</textarea><div class="rwedit">🎁 <input class="rw-input" value="'+esc(l.recompensa||"")+'" placeholder="Recompensa"></div>'+difSelect(l)+'</div>';
     html+='<button class="del" type="button" title="Borrar">🗑</button>';
   } else {
-    html+='<div class="info"><div class="nm">'+esc(l.nombre)+'</div><div class="ds">'+esc(l.descripcion)+'</div>';
+    html+='<div class="info"><div class="nm">'+esc(l.nombre)+difBadge(l)+'</div><div class="ds">'+esc(l.descripcion)+'</div>';
     if(l.recompensa)html+='<div class="rw">🎁 '+esc(l.recompensa)+'</div>';
     if(on)html+='<div class="fecha">✓ Conseguido el '+fmtFecha(unlocked[id])+'</div>';
     html+='<div class="agg">👥 <b>'+ag+'</b>/'+PLAYERS.length+' jugadores</div>';
@@ -394,6 +399,7 @@ function buildCard(l){
     var nm=div.querySelector(".nm-input");if(nm)nm.addEventListener("change",function(){l.nombre=nm.value;render();saveLogros();});
     var ds=div.querySelector(".ds-input");if(ds)ds.addEventListener("change",function(){l.descripcion=ds.value;debounce("l",saveLogros);});
     var ri=div.querySelector(".rw-input");if(ri)ri.addEventListener("input",function(){l.recompensa=ri.value;debounce("l",saveLogros);});
+    var di=div.querySelector(".dif-input");if(di)di.addEventListener("change",function(){if(di.value)l.dificultad=di.value;else delete l.dificultad;render();saveLogros();});
     var db=div.querySelector(".del");if(db)db.addEventListener("click",function(){deleteLogro(l);});
     var mb=div.querySelectorAll(".movebtn");for(var b=0;b<mb.length;b++){(function(btn){btn.addEventListener("click",function(){moveLogro(l,parseInt(btn.getAttribute("data-d"),10));});})(mb[b]);}
     div.setAttribute("draggable","true");
