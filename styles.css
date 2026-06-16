@@ -173,4 +173,26 @@
   .icbtn{background:#0f1c27;border:1px solid var(--line);border-radius:7px;font-size:17px;width:34px;height:32px;cursor:pointer;line-height:1;padding:0;color:var(--muted);}
   .icbtn:hover{background:#22384a;}
   .icbtn.sel{border-color:var(--accent);background:#1c3144;}
-  .icbtn.auto{font-size:11px;width:auto;padding:0 9px;}
+  .icbtn.auto,.icbtn.img{font-size:11px;width:auto;padding:0 9px;}
+  .who{display:inline-flex;align-items:center;gap:8px;cursor:pointer;background:#16242f;border:1px solid var(--line);border-radius:20px;padding:4px 12px 4px 4px;}
+  .who:hover{border-color:var(--accent);}
+  .avatar-ini{width:28px;height:28px;border-radius:50%;background:#1c3144;color:var(--accent);display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;border:1px solid var(--accent);flex:0 0 auto;}
+  .who-name{color:#fff;font-weight:600;font-size:13px;}
+  .who-rol{color:var(--muted);font-size:11px;}
+  .ic-img{width:100%;height:100%;object-fit:cover;}
+  .logro-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+  .logro-tile{width:54px;height:54px;border:1px solid var(--line);border-radius:8px;background:#0f1923;display:flex;align-items:center;justify-content:center;font-size:30px;cursor:pointer;overflow:hidden;padding:0;color:var(--text);}
+  .logro-tile:hover,.logro-tile.sel{border-color:var(--accent);background:#16242f;}
+  .logro-tile img{width:100%;height:100%;object-fit:cover;}
+  .perfil-feat{display:flex;align-items:center;gap:14px;background:#16242f;border:1px solid var(--accent2);border-radius:10px;padding:14px 16px;margin:10px 0;}
+  .perfil-feat .fic{width:64px;height:64px;flex:0 0 auto;border:1px solid var(--line);border-radius:8px;background:#0f1923;display:flex;align-items:center;justify-content:center;font-size:38px;overflow:hidden;}
+  .perfil-feat .fic img{width:100%;height:100%;object-fit:cover;}
+  .perfil-feat .fn{font-size:16px;font-weight:600;color:#fff;}
+  .perfil-feat .fd{font-size:13px;color:var(--text);margin-top:3px;}
+  .perfil-feat .fc{font-size:11.5px;color:var(--muted);margin-top:4px;}
+  .miembro-row{display:grid;grid-template-columns:1fr 64px 64px;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);}
+  .miembro-row .mh{font-size:11px;color:var(--muted);text-align:center;}
+  .miembro-row .mu{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--text);}
+  .miembro-row span:nth-child(2),.miembro-row span:nth-child(3){text-align:center;}
+  .miembro-row input{width:17px;height:17px;accent-color:var(--accent);}
+  .miembro-head{border-bottom:1px solid var(--accent2);}
