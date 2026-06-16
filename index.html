@@ -804,7 +804,7 @@ function renderMiembrosList(){
     var vChecked=(info.visitantes&&info.visitantes[u])?" checked":"";
     var rb='<span class="rol-badge rol-'+rolDe(u)+'">'+rolDe(u)+'</span>';
     html+='<div class="miembro-row"><span class="mu">'+esc(u)+rb+(esCreador?' <span class="rol-badge">creador</span>':'')+'</span>'+
-      '<span><input type="checkbox" class="m-mi" value="'+esc(u)+'"'+mChecked+'></span>'+
+      '<span><input type="checkbox" class="m-mi" value="'+esc(u)+'"'+(esCreador?"":mChecked)+(esCreador?" disabled title=\"El creador es el GM, no jugador\"":"")+'></span>'+
       '<span><input type="checkbox" class="m-gm" value="'+esc(u)+'"'+gChecked+(esCreador?" disabled":"")+'></span>'+
       '<span><input type="checkbox" class="m-vi" value="'+esc(u)+'"'+vChecked+(esCreador?" disabled":"")+'></span></div>';
   });
@@ -821,7 +821,7 @@ function guardarMiembros(){
   if(!miembrosCampId)return;
   var info=miembrosCampInfo||{};
   var mi={},gm={},vi={};
-  var mis=document.querySelectorAll("#miembros-body .m-mi");for(var i=0;i<mis.length;i++){if(mis[i].checked)mi[mis[i].value]=true;}
+  var mis=document.querySelectorAll("#miembros-body .m-mi");for(var i=0;i<mis.length;i++){if(mis[i].checked&&mis[i].value!==info.gm)mi[mis[i].value]=true;}
   var gs=document.querySelectorAll("#miembros-body .m-gm");for(var j=0;j<gs.length;j++){if(gs[j].checked&&gs[j].value!==info.gm)gm[gs[j].value]=true;}
   var vs=document.querySelectorAll("#miembros-body .m-vi");for(var w=0;w<vs.length;w++){if(vs[w].checked&&vs[w].value!==info.gm)vi[vs[w].value]=true;}
   setStatus("Guardando…");
@@ -842,7 +842,7 @@ function entrarCampana(id){
   fetch(FB+"/campanas/"+id+".json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(c){
     if(!c||!c.info){alert("Campaña no encontrada.");return;}
     if(!puedeEntrar(c.info)){alert("No estás asignado a esta campaña.");return;}
-    currentCamp=id;campInfo=c.info;GMname=c.info.gm||"";MIEMBROS=ordenMiembros(c.info.miembros);
+    currentCamp=id;campInfo=c.info;GMname=c.info.gm||"";MIEMBROS=ordenMiembros(c.info.miembros).filter(function(m){return m!==GMname;});
     LOGROS=toArr(c.logros);progreso=c.progreso||{};guiaMD=(typeof c.guia==="string")?c.guia:null;
     state.tab="grupo";state.sub="todos";
     document.getElementById("camp-nombre").textContent=esc(c.info.nombre||id);
