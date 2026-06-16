@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RolCampaingAwardSystem</title>
-<link rel="stylesheet" href="styles.css?v=12">
+<link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
 
@@ -77,6 +77,7 @@
   </div>
 
   <div class="lockbar" id="lockbar" style="display:none;">🔒 <b>Campaña bloqueada</b> — solo lectura. Nadie marca ni edita; solo el GM creador y el Owner pueden entrar.</div>
+  <div class="lockbar" id="visitbar" style="display:none;background:#16314e;border-color:#2a6a8f;color:#bfe0ff;">👁 Estás como <b>visitante</b>: puedes ver todo pero no marcar ni editar.</div>
   <nav class="tabs" id="maintabs"></nav>
   <div id="subtabs"></div>
   <main id="list"></main>
@@ -240,6 +241,8 @@ function esOwner(){return rolDe(currentUser)==="owner";}
 function esGM(info){ return rolDe(currentUser)==="owner" || !!(info&&(info.gm===currentUser||(info.gms&&info.gms[currentUser]))); }
 // esGMprincipal: solo el creador de la campaña (info.gm) y el Owner. Manda incluso con la campaña bloqueada.
 function esGMprincipal(info){ return rolDe(currentUser)==="owner" || !!(info&&info.gm===currentUser); }
+// Visitante: puede ENTRAR a la campaña en SOLO LECTURA (no marca ni edita, no tiene lista). Se asigna por campaña.
+function esVisitante(info){ return !!(info&&info.visitantes&&info.visitantes[currentUser]); }
 function rellenarDatalist(){var dl=document.getElementById("userlist");if(!dl)return;dl.innerHTML="";Object.keys(USERS).forEach(function(u){var o=document.createElement("option");o.value=u;dl.appendChild(o);});}
 function loadUsers(cb){
   fetch(FB+"/usuarios.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(obj){
@@ -367,6 +370,8 @@ function iconHTML(l){ var v=getIcon(l); return esImg(v)?('<img class="ic-img" sr
 // Icono de un personaje/jugador en ESTA campaña: personalizado (campInfo.pjicon) > por defecto > 👤
 function iconPJ(m){ return (campInfo&&campInfo.pjicon&&campInfo.pjicon[m]) || PLAYER_ICON[m] || "👤"; }
 function iconPJHTML(m){ var v=iconPJ(m); return esImg(v)?('<img class="ic-mini" src="'+v+'" alt="">'):v; }
+// Circulito "GM" en la esquina del icono para distinguir los logros de GM.
+function gmBadge(l){ return (l&&l.categoria==="gm")?'<span class="gmbadge" title="Logro de GM">GM</span>':""; }
 function fmtFecha(iso){ try{var d=new Date(iso);return ("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2)+"/"+d.getFullYear();}catch(e){return "";} }
 function fmtFechaHora(iso){ try{var d=new Date(iso);return fmtFecha(iso)+" "+("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2);}catch(e){return "";} }
 // Registro de actividad (audit log): un evento de texto por acción, sin esperar respuesta.
@@ -385,8 +390,7 @@ function nivelDeXP(xp){var lvl=1,need=50,acc=0;while(xp>=acc+need){acc+=need;lvl
 function marcoNivel(lvl){ if(lvl<=5)return ""; return ["comun","raro","epico","legendario"][Math.min(Math.floor((lvl-6)/10),3)]; }
 var NOM_CATS=["Mejor acción de la sesión","Peor acción de la sesión","Acción más divertida","MVP de los combates"];
 // Resumen de cuenta de un usuario a partir de TODAS las campañas: XP, nivel, prestigio, premios y logros.
-// Dueño = personaje del logro (individual) o quien lo marcó (logros 'para todos' sin personaje). Los de GRUPO NO son de nadie: solo cuentan para el GM creador (x2).
-// XP: logros propios x1; si eres el GM CREADOR, grupo x2 (se te muestran) + individuales ajenos un 50% (solo XP).
+// XP (todos x1, sin multiplicadores): GRUPO cuenta para TODO el grupo (miembros + GM); logros de GM (categoria "gm") solo para el GM creador; individuales para su personaje; "para todos" para quien lo marcó.
 // Prestigio: +1 estrella y +500 XP por cada campaña EN LA QUE PARTICIPAS que esté bloqueada (terminada).
 function computarCuenta(camps,user){
   camps=camps||{};
@@ -397,15 +401,15 @@ function computarCuenta(camps,user){
     var noms=c.nominaciones||{};
     Object.keys(noms).forEach(function(sid){ var v=noms[sid]&&noms[sid].votos; if(!v)return; Object.keys(v).forEach(function(cat){ var vv=v[cat]||{},tal={},mx=0; Object.keys(vv).forEach(function(voter){var n=vv[voter];if(n){tal[n]=(tal[n]||0)+1;if(tal[n]>mx)mx=tal[n];}}); if(mx>0&&tal[user]===mx)premios[cat]=(premios[cat]||0)+1; }); });
     var esMiembro=(info.gm===user)||(info.miembros&&info.miembros[user])||(info.gms&&info.gms[user]);
-    var esCreador=(info.gm===user);
     var logros=toArr(c.logros),prog=c.progreso||{},tiles=[],xpCamp=0;
     logros.forEach(function(l){
       var s=slug(l.nombre),pe=prog[s]; if(!pe)return;
-      var por=(pe&&typeof pe==="object")?pe.por:null;
-      var esGrupo=(l.categoria==="grupo");
-      var esMio = esGrupo ? false : (l.personaje ? (l.personaje===user) : (por===user));
+      var por=(pe&&typeof pe==="object")?pe.por:null, cat=l.categoria, esMio=false;
+      if(cat==="grupo"){ esMio=esMiembro; }
+      else if(cat==="gm"){ esMio=(info.gm===user); }
+      else if(l.personaje){ esMio=(l.personaje===user); }
+      else { esMio=(por===user); }
       if(esMio){ tiles.push(l); xpCamp+=xpDeRareza(l.dificultad); }
-      else if(esCreador){ if(esGrupo){ tiles.push(l); xpCamp+=xpDeRareza(l.dificultad)*2; } else { xpCamp+=Math.round(xpDeRareza(l.dificultad)*0.5); } }
     });
     if(!esMiembro && tiles.length===0) return;
     if(info.bloqueada){ prestigio++; xpCamp+=500; }
@@ -532,7 +536,7 @@ function renderPerfil(){
         mcp.logros.forEach(function(l){
           var s=slug(l.nombre),fav=vitrina.indexOf(s)>=0,rcls=l.dificultad?(" r-"+difKey(l.dificultad)):"";
           perfilLogros.push({l:l,camp:mcp.nombre});
-          html+='<div class="logro-tilewrap"><button class="logro-tile'+rcls+(fav?" fav":"")+'" type="button" data-i="'+gi+'" title="'+esc(l.nombre)+'">'+iconHTML(l)+'</button>'+(propio?('<button class="fav-btn'+(fav?" on":"")+'" type="button" data-fav="'+esc(s)+'" title="Fijar como destacado">'+(fav?"★":"☆")+'</button>'):(fav?'<span class="fav-btn on" style="pointer-events:none">★</span>':''))+'</div>';
+          html+='<div class="logro-tilewrap"><button class="logro-tile'+rcls+(fav?" fav":"")+'" type="button" data-i="'+gi+'" title="'+esc(l.nombre)+'">'+iconHTML(l)+'</button>'+gmBadge(l)+(propio?('<button class="fav-btn'+(fav?" on":"")+'" type="button" data-fav="'+esc(s)+'" title="Fijar como destacado">'+(fav?"★":"☆")+'</button>'):(fav?'<span class="fav-btn on" style="pointer-events:none">★</span>':''))+'</div>';
           gi++;
         });
         html+='</div>';
@@ -729,7 +733,7 @@ function loadCampaigns(){
     renderCampaigns(camps||{});
   }).catch(function(){list.innerHTML='<div class="empty">No se pudieron cargar las campañas.</div>';});
 }
-function puedeEntrar(info){ if(info&&info.bloqueada)return esGMprincipal(info); return esGM(info) || !!(info&&info.miembros&&info.miembros[currentUser]); }
+function puedeEntrar(info){ if(info&&info.bloqueada)return esGMprincipal(info); return esGM(info) || !!(info&&info.miembros&&info.miembros[currentUser]) || esVisitante(info); }
 function renderCampaigns(camps){
   var list=document.getElementById("camp-list");list.innerHTML="";
   var ids=Object.keys(camps);
@@ -791,16 +795,18 @@ var miembrosCampId=null, miembrosCampInfo=null;
 function renderMiembrosList(){
   var info=miembrosCampInfo||{};
   var body=document.getElementById("miembros-body");
-  var html='<p style="color:var(--muted);font-size:13px;margin:0 0 12px;line-height:1.55;"><b>Miembro</b> = entra y tiene su lista (marca solo lo suyo). <b>GM</b> = manda en esta campaña (marca cualquier logro, edita y asigna). El creador siempre es GM.</p>';
-  html+='<div class="miembros-list"><div class="miembro-row miembro-head"><span></span><span class="mh">Miembro</span><span class="mh">GM</span></div>';
+  var html='<p style="color:var(--muted);font-size:13px;margin:0 0 12px;line-height:1.55;"><b>Miembro</b> = entra y tiene su lista (marca solo lo suyo). <b>GM</b> = manda (marca todo, edita, asigna). <b>Visitante</b> = entra en SOLO LECTURA (ve todo, no marca ni tiene lista). El creador siempre es GM.</p>';
+  html+='<div class="miembros-list"><div class="miembro-row miembro-head"><span></span><span class="mh">Miembro</span><span class="mh">GM</span><span class="mh">Visita</span></div>';
   Object.keys(USERS).forEach(function(u){
     var esCreador=(info.gm===u);
     var mChecked=(info.miembros&&info.miembros[u])?" checked":"";
     var gChecked=(esCreador||(info.gms&&info.gms[u]))?" checked":"";
+    var vChecked=(info.visitantes&&info.visitantes[u])?" checked":"";
     var rb='<span class="rol-badge rol-'+rolDe(u)+'">'+rolDe(u)+'</span>';
     html+='<div class="miembro-row"><span class="mu">'+esc(u)+rb+(esCreador?' <span class="rol-badge">creador</span>':'')+'</span>'+
       '<span><input type="checkbox" class="m-mi" value="'+esc(u)+'"'+mChecked+'></span>'+
-      '<span><input type="checkbox" class="m-gm" value="'+esc(u)+'"'+gChecked+(esCreador?" disabled":"")+'></span></div>';
+      '<span><input type="checkbox" class="m-gm" value="'+esc(u)+'"'+gChecked+(esCreador?" disabled":"")+'></span>'+
+      '<span><input type="checkbox" class="m-vi" value="'+esc(u)+'"'+vChecked+(esCreador?" disabled":"")+'></span></div>';
   });
   html+='</div>';
   body.innerHTML=html;
@@ -814,12 +820,14 @@ function abrirMiembros(id,info){
 function guardarMiembros(){
   if(!miembrosCampId)return;
   var info=miembrosCampInfo||{};
-  var mi={},gm={};
+  var mi={},gm={},vi={};
   var mis=document.querySelectorAll("#miembros-body .m-mi");for(var i=0;i<mis.length;i++){if(mis[i].checked)mi[mis[i].value]=true;}
   var gs=document.querySelectorAll("#miembros-body .m-gm");for(var j=0;j<gs.length;j++){if(gs[j].checked&&gs[j].value!==info.gm)gm[gs[j].value]=true;}
+  var vs=document.querySelectorAll("#miembros-body .m-vi");for(var w=0;w<vs.length;w++){if(vs[w].checked&&vs[w].value!==info.gm)vi[vs[w].value]=true;}
   setStatus("Guardando…");
   fetch(FB+"/campanas/"+miembrosCampId+"/info/miembros.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(mi)})
     .then(function(){return fetch(FB+"/campanas/"+miembrosCampId+"/info/gms.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(gm)});})
+    .then(function(){return fetch(FB+"/campanas/"+miembrosCampId+"/info/visitantes.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(vi)});})
     .then(function(r){if(r.ok)logEvento("👥 cambió miembros/GM","",miembrosCampId);setStatus(r.ok?"✓ Guardado":"⚠ Error");document.getElementById("miembros-modal").classList.remove("open");loadCampaigns();})
     .catch(function(){setStatus("⚠ Sin conexión");});
 }
@@ -849,12 +857,13 @@ function entrarCampana(id){
 function isPlayer(l){return l.personaje&&MIEMBROS.indexOf(l.personaje)>=0;}
 function viewLogros(){
   if(state.tab==="grupo")return LOGROS.filter(function(l){return l.categoria==="grupo";});
-  if(state.sub==="todos")return LOGROS.filter(function(l){return l.categoria!=="grupo"&&!isPlayer(l);});
+  if(state.sub==="__gm__")return LOGROS.filter(function(l){return l.categoria==="gm";});
+  if(state.sub==="todos")return LOGROS.filter(function(l){return l.categoria!=="grupo"&&l.categoria!=="gm"&&!isPlayer(l);});
   return LOGROS.filter(function(l){return l.personaje===state.sub;});
 }
 function isDone(l){return !!progreso[slug(l.nombre)];}
 function stats(arr){var u=0;arr.forEach(function(l){if(isDone(l))u++;});return{u:u,t:arr.length};}
-function puedeMarcar(l){ if(campInfo&&campInfo.bloqueada)return false; return esGM(campInfo) || !!(l.personaje && l.personaje===currentUser); }
+function puedeMarcar(l){ if(campInfo&&campInfo.bloqueada)return false; if(l.categoria==="gm")return esGMprincipal(campInfo); return esGM(campInfo) || !!(l.personaje && l.personaje===currentUser); }
 function bloqueado(l){ return !!(l.requiere && !progreso[l.requiere]); }
 function reqNombre(l){ if(!l.requiere)return ""; var p=LOGROS.find(function(x){return slug(x.nombre)===l.requiere;}); return p?p.nombre:"(?)"; }
 
@@ -905,6 +914,7 @@ function addLogro(){
   var nuevo={nombre:n,descripcion:(document.getElementById("add-desc").value||"").trim(),recompensa:(document.getElementById("add-recompensa").value||"").trim()};
   if(addIcono)nuevo.icono=addIcono;
   if(state.tab==="grupo"){nuevo.categoria="grupo";}
+  else if(state.sub==="__gm__"){nuevo.categoria="gm";}
   else if(state.sub!=="todos"){nuevo.categoria="pj:"+state.sub;nuevo.personaje=state.sub;}
   else{nuevo.categoria="general";}
   LOGROS.push(nuevo);addIcono="";logEvento("➕ creó logro",n);render();saveLogros();
@@ -963,6 +973,7 @@ Pulsa tu **avatar** (arriba) para ver tu perfil estilo Steam: foto, logros y cam
 - **✏️ Modo edición**: añade, edita, borra y reordena logros (arrastrando o con ▲▼). En cada logro puedes cambiar **nombre, descripción, 🎁 recompensa, rareza** y el **icono** (un emoji o **📷 una imagen** tuya).
 - **🔗 Cadena**: pulsa 🔗 en un logro y luego 🔗 en otro para encadenarlos (el 2º se desbloquea al conseguir el 1º). **👁/🙈**: oculta un logro a los jugadores; revélalo cuando quieras.
 - **Icono de personaje**: en la pestaña de un jugador (modo edición) puedes ponerle un emoji o **una imagen** como icono (se ve en su pestaña y en el Resumen).
+- **🎲 Logros de GM**: en Individuales tienes una pestaña **GM** con tus propios retos de máster (llevan un circulito **GM**); solo los marca el GM y su XP va a tu perfil. Los **logros de grupo** dan su XP a **todo el grupo, incluido tú**.
 - **➕ Añadir**: crea un logro en la pestaña en la que estés.
 - **📊 Resumen**: cuántos logros lleva cada jugador y el total.
 - **🔒 Bloquear campaña** *(solo el GM creador y el Owner)*: la congela en **solo lectura** (nadie marca ni edita) y solo podéis entrar el creador y el Owner — para cuando la campaña termina. **🔓 Reabrir** la reactiva.
@@ -985,9 +996,10 @@ Ponle nombre. Se crea vacía y quedas como **GM creador**. Luego usa **👥 Miem
 Pon nombre y contraseña. El nuevo usuario aparece en el **login** y en la lista de miembros; empieza sin campañas hasta que lo añadas.
 
 ## 👥 Miembros / GM  *(quien manda en esa campaña)*
-Dos casillas por persona:
+Tres casillas por persona:
 - **Miembro**: entra y tiene **su lista** (marca solo lo suyo).
 - **GM**: **manda** en esa campaña (marca cualquier logro, edita, asigna y ve el Resumen).
+- **Visitante**: entra en **solo lectura** (ve todo, no marca ni tiene lista). Útil para alguien que solo quiere mirar.
 - **📷 Foto**: dale una foto a la campaña (se ve en el menú y junto a su nombre en los perfiles).
 
 El **creador** sale como GM fijo. Marca **GM** a quien quieras que te ayude a dirigir.
@@ -1270,7 +1282,9 @@ function renderTabs(){
   if(state.tab!=="ind"){sw.innerHTML="";return;}
   sw.innerHTML='<div class="subtabs" id="st"></div>';
   var st=document.getElementById("st");
-  var groups=[{key:"todos",icon:"🌐",label:"Para todos",arr:LOGROS.filter(function(l){return l.categoria!=="grupo"&&!isPlayer(l);})}];
+  var groups=[{key:"todos",icon:"🌐",label:"Para todos",arr:LOGROS.filter(function(l){return l.categoria!=="grupo"&&l.categoria!=="gm"&&!isPlayer(l);})}];
+  var gmArr=LOGROS.filter(function(l){return l.categoria==="gm";});
+  if(gmArr.length||esGMprincipal(campInfo))groups.push({key:"__gm__",icon:"🎲",label:"GM",arr:gmArr});
   MIEMBROS.forEach(function(m){groups.push({key:m,icon:iconPJHTML(m),label:m,arr:LOGROS.filter(function(l){return l.personaje===m;})});});
   groups.forEach(function(g){
     var s=stats(g.arr);var b=document.createElement("button");b.className="subtab"+((state.sub===g.key)?" active":"");
@@ -1298,7 +1312,7 @@ function buildCard(l){
   var puede=puedeMarcar(l)&&!blq;
   var rcls=l.dificultad?(" r-"+difKey(l.dificultad)):"";
   var div=document.createElement("div");div.className="ach"+(on?" on":"")+(editMode?" editing":"")+(blq?" bloqueado":"")+(chainSource===l?" chain-src":"");
-  var html='<div class="ic'+rcls+'">'+iconHTML(l)+(on?'<span class="vbadge">✓</span>':"")+(oculto?'<span class="ocbadge" title="Oculto para los jugadores">🙈</span>':"")+'</div>';
+  var html='<div class="ic'+rcls+'">'+iconHTML(l)+(on?'<span class="vbadge">✓</span>':"")+(oculto?'<span class="ocbadge" title="Oculto para los jugadores">🙈</span>':"")+gmBadge(l)+'</div>';
   if(editMode){
     html+='<div class="movebtns"><button class="movebtn" data-d="-1" title="Subir">▲</button><button class="movebtn" data-d="1" title="Bajar">▼</button></div>';
     html+='<div class="info"><input class="nm-input" value="'+esc(l.nombre)+'"><textarea class="ds-input" rows="2">'+esc(l.descripcion||"")+'</textarea><div class="rwedit">🎁 <input class="rw-input" value="'+esc(l.recompensa||"")+'" placeholder="Recompensa"></div>'+difSelect(l)+iconPicker(l.icono||"","card-ic",true)+
@@ -1368,6 +1382,7 @@ function render(){
   document.getElementById("dm-fab").style.display="inline-flex";
   var lb=document.getElementById("lockbtn"); if(lb){lb.style.display=prin?"inline-block":"none"; lb.textContent=blo?"🔓 Reabrir":"🔒 Bloquear";}
   document.getElementById("lockbar").style.display=blo?"block":"none";
+  document.getElementById("visitbar").style.display=(esVisitante(campInfo)&&!gm)?"block":"none";
   if(!editMode)chainSource=null;
   renderTabs();renderList();renderGlobal();
 }
