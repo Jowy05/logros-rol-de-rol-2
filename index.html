@@ -30,6 +30,7 @@
       <div class="camp-sub" id="camp-whoami"></div>
     </div>
     <button class="btn dm" id="crear-camp" style="display:none;">➕ Crear campaña</button>
+    <button class="btn dm" id="crear-usuario" style="display:none;">➕ Crear usuario</button>
     <button class="btn" id="camp-logout">Salir</button>
   </div>
   <div id="camp-list"></div>
@@ -106,6 +107,7 @@
   <div class="modal-card">
     <div class="modal-head">
       <h2 id="miembros-title">Miembros</h2>
+      <button class="btn dm" id="miembros-nuevo" type="button">➕ Nuevo usuario</button>
       <button class="btn dm" id="miembros-save" type="button">💾 Guardar</button>
       <button class="btn" id="miembros-close" type="button">✕ Cerrar</button>
     </div>
@@ -118,17 +120,40 @@
 const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.app";
 
 // === CUENTAS: hash SHA-256 de la contraseña + rol ===
-const USERS={
-  "Joel":"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",
-  "Didac":"a2fc86bac4cec78448d73cbd19b5e77df108a861a5d553ac1a6663fa8069cfeb",
-  "Cristina":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
-  "Carol":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
-  "Leomar":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
-  "Oriol":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7"
+// Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
+var USERS={}, ROL={};
+const SEED_USERS={
+  "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
+  "Didac":{pass:"a2fc86bac4cec78448d73cbd19b5e77df108a861a5d553ac1a6663fa8069cfeb",rol:"gm"},
+  "Cristina":{pass:"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",rol:"jugador"},
+  "Carol":{pass:"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",rol:"jugador"},
+  "Leomar":{pass:"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",rol:"jugador"},
+  "Oriol":{pass:"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",rol:"jugador"}
 };
-const ROL={ "Joel":"owner", "Didac":"gm", "Cristina":"jugador", "Carol":"jugador", "Leomar":"jugador", "Oriol":"jugador" };
+function aplicarUsuarios(obj){ USERS={}; ROL={}; Object.keys(obj||{}).forEach(function(n){ var v=obj[n]||{}; USERS[n]=v.pass||""; ROL[n]=v.rol||"jugador"; }); }
+aplicarUsuarios(SEED_USERS);
 function rolDe(u){return ROL[u]||"jugador";}
 function isAdmin(u){var r=rolDe(u);return r==="owner"||r==="gm";}
+function rellenarDatalist(){var dl=document.getElementById("userlist");if(!dl)return;dl.innerHTML="";Object.keys(USERS).forEach(function(u){var o=document.createElement("option");o.value=u;dl.appendChild(o);});}
+function loadUsers(cb){
+  fetch(FB+"/usuarios.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(obj){
+    if(obj&&Object.keys(obj).length)aplicarUsuarios(obj);
+    rellenarDatalist(); if(cb)cb();
+  }).catch(function(){ rellenarDatalist(); if(cb)cb(); });
+}
+function crearUsuario(after){
+  if(!isAdmin(currentUser)){alert("Solo el GM/Owner puede crear usuarios.");return;}
+  var nombre=(window.prompt("Nombre del nuevo usuario:","")||"").trim();
+  if(!nombre)return;
+  if(/[.#$\[\]\/]/.test(nombre)){alert("El nombre no puede contener . # $ [ ] /");return;}
+  if(Object.keys(USERS).some(function(u){return norm(u)===norm(nombre);})){alert("Ya existe un usuario con ese nombre.");return;}
+  var pass=(window.prompt("Contraseña para "+nombre+":","")||"").trim();
+  if(!pass){alert("Hace falta una contraseña.");return;}
+  setStatus("Creando usuario…");
+  fetch(FB+"/usuarios/"+encodeURIComponent(nombre)+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({pass:sha256hex(pass),rol:"jugador"})})
+    .then(function(r){if(!r.ok)throw new Error("err");setStatus("✓ Guardado");loadUsers(function(){alert("✅ Usuario «"+nombre+"» creado. Ya puedes añadirlo a campañas con «👥 Miembros».");if(after)after();});})
+    .catch(function(){setStatus("⚠ Error");alert("No se pudo crear el usuario.");});
+}
 
 let currentUser="", currentCamp=null, campInfo=null, MIEMBROS=[], GMname="";
 let LOGROS=[], progreso={}, guiaMD=null, editMode=false;
@@ -231,6 +256,7 @@ function startSession(user){
   currentUser=user;
   document.getElementById("camp-whoami").textContent="👋 "+user+" · "+rolDe(user);
   document.getElementById("crear-camp").style.display=isAdmin(user)?"inline-block":"none";
+  document.getElementById("crear-usuario").style.display=isAdmin(user)?"inline-block":"none";
   showCampaigns();
 }
 
@@ -273,10 +299,9 @@ function crearCampana(){
     .then(function(){alert("✅ Campaña «"+nombre+"» creada. Ahora pulsa «👥 Miembros» para asignar jugadores.");loadCampaigns();})
     .catch(function(){alert("No se pudo crear la campaña.");});
 }
-var miembrosCampId=null;
-function abrirMiembros(id,info){
-  miembrosCampId=id;
-  document.getElementById("miembros-title").textContent="Miembros — "+(info.nombre||id);
+var miembrosCampId=null, miembrosCampInfo=null;
+function renderMiembrosList(){
+  var info=miembrosCampInfo||{};
   var body=document.getElementById("miembros-body");
   var html='<p style="color:var(--muted);font-size:13px;margin:0 0 12px;">Marca quién puede entrar y tener su lista en esta campaña.</p><div class="miembros-list">';
   Object.keys(USERS).forEach(function(u){
@@ -286,6 +311,11 @@ function abrirMiembros(id,info){
   });
   html+='</div>';
   body.innerHTML=html;
+}
+function abrirMiembros(id,info){
+  miembrosCampId=id; miembrosCampInfo=info;
+  document.getElementById("miembros-title").textContent="Miembros — "+(info.nombre||id);
+  renderMiembrosList();
   document.getElementById("miembros-modal").classList.add("open");
 }
 function guardarMiembros(){
@@ -498,9 +528,9 @@ document.getElementById("miembros-modal").addEventListener("click",function(e){i
 function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reload();}
 
 (function(){
-  var dl=document.getElementById("userlist");
-  Object.keys(USERS).forEach(function(u){var o=document.createElement("option");o.value=u;dl.appendChild(o);});
   document.getElementById("li-btn").addEventListener("click",doLogin);
+  document.getElementById("crear-usuario").addEventListener("click",function(){crearUsuario();});
+  document.getElementById("miembros-nuevo").addEventListener("click",function(){crearUsuario(renderMiembrosList);});
   document.getElementById("li-pass").addEventListener("keydown",function(e){if(e.key==="Enter")doLogin();});
   document.getElementById("li-user").addEventListener("keydown",function(e){if(e.key==="Enter")document.getElementById("li-pass").focus();});
   document.getElementById("logout").addEventListener("click",logout);
@@ -512,8 +542,10 @@ function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reloa
   document.getElementById("guia-modal").addEventListener("click",function(e){if(e.target.id==="guia-modal")closeGuia();});
   document.getElementById("resumen-close").addEventListener("click",closeResumen);
   document.getElementById("resumen-modal").addEventListener("click",function(e){if(e.target.id==="resumen-modal")closeResumen();});
-  var sess="";try{sess=localStorage.getItem(SESSION)||"";}catch(e){}
-  if(sess&&Object.prototype.hasOwnProperty.call(USERS,sess))startSession(sess); else show("login");
+  loadUsers(function(){
+    var sess="";try{sess=localStorage.getItem(SESSION)||"";}catch(e){}
+    if(sess&&Object.prototype.hasOwnProperty.call(USERS,sess))startSession(sess); else show("login");
+  });
 })();
 </script>
 </body>
