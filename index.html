@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Logros — Rol de Rol 2</title>
+<title>Logros — Rol de Rol</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,46 +11,59 @@
 <div id="login" class="login">
   <div class="login-card">
     <div class="login-logo">🏆</div>
-    <h2>Rol de Rol 2</h2>
-    <p class="login-sub">Inicia sesión para ver tus logros</p>
+    <h2>Logros de Rol</h2>
+    <p class="login-sub">Inicia sesión</p>
     <input id="li-user" list="userlist" placeholder="Nombre (p. ej. Joel)" autocomplete="off">
     <datalist id="userlist"></datalist>
     <input id="li-pass" type="password" placeholder="Contraseña">
     <div id="li-err" class="login-err"></div>
     <button id="li-btn" class="login-btn">Entrar</button>
-    <div class="login-hint">¿No tienes credenciales? Pídeselas a Didac (DM).</div>
+    <div class="login-hint">¿No tienes credenciales? Pídeselas a tu GM.</div>
   </div>
 </div>
 
+<div id="campaigns" class="campwrap" style="display:none;">
+  <div class="camp-top">
+    <div class="logo">🏆</div>
+    <div style="flex:1;min-width:160px;">
+      <h1 style="margin:0;font-size:24px;color:#fff;">Campañas</h1>
+      <div class="camp-sub" id="camp-whoami"></div>
+    </div>
+    <button class="btn dm" id="crear-camp" style="display:none;">➕ Crear campaña</button>
+    <button class="btn" id="camp-logout">Salir</button>
+  </div>
+  <div id="camp-list"></div>
+</div>
+
 <div class="wrap" id="app" style="display:none;">
-  <div class="banner" id="banner">Cada jugador lleva <b>su propio progreso</b> (se guarda solo en la nube). Marca tus logros y mira cuántos los habéis conseguido. 👥</div>
+  <div class="banner" id="banner">Cada jugador marca <b>su propia lista</b> (solo él y el GM/Owner). Todos veis las listas de todos. Se guarda solo en la nube.</div>
 
   <div class="top">
     <div class="brand">
       <div class="logo">🏆</div>
       <div>
-        <h1>Logros — Rol de Rol 2</h1>
-        <div class="sub">Campaña isekai de Pathfinder 1e · DM: Didac</div>
+        <h1 id="camp-nombre">Logros</h1>
+        <div class="sub" id="camp-rol"></div>
       </div>
     </div>
     <div class="globalbox">
-      <div class="gline"><b id="g-count">0/0</b> tuyos conseguidos</div>
+      <div class="gline"><b id="g-count">0/0</b> logros conseguidos</div>
       <div class="bar"><div class="fill" id="g-fill"></div></div>
       <div class="perfect" id="g-perfect"></div>
     </div>
   </div>
 
   <div class="controls">
+    <button class="btn" id="volver">← Campañas</button>
     <input type="text" id="search" placeholder="🔍  Buscar logro...">
     <select id="filtro">
       <option value="todos">Todos</option>
       <option value="pend">Pendientes</option>
       <option value="hechos">Conseguidos</option>
     </select>
-    <label class="ck" id="editwrap" style="display:none;"><input type="checkbox" id="t-edit"> ✏️ Modo edición (DM)</label>
+    <label class="ck" id="editwrap" style="display:none;"><input type="checkbox" id="t-edit"> ✏️ Modo edición</label>
     <button class="btn dm" id="resumenbtn" style="display:none;">📊 Resumen</button>
     <span id="savestatus" style="font-size:12px;color:#9fd3a0;min-width:74px;"></span>
-    <button class="btn" id="reset">Reiniciar</button>
     <span class="whoami" id="whoami"></span>
     <button class="btn" id="logout">Salir</button>
   </div>
@@ -59,7 +72,7 @@
   <div id="subtabs"></div>
   <main id="list"></main>
 
-  <div class="foot">Progreso por jugador, en la nube (Firebase). Se guarda solo. El conteo 👥 se actualiza al recargar.</div>
+  <div class="foot">Progreso en la nube (Firebase). Cada lista la marca su dueño o el GM/Owner; todos las ven.</div>
 </div>
 
 <button class="dm-fab" id="dm-fab" type="button">📖 Guía / Editar</button>
@@ -67,7 +80,7 @@
 <div class="modal" id="guia-modal">
   <div class="modal-card">
     <div class="modal-head">
-      <h2>📖 Guía del DM</h2>
+      <h2>📖 Guía del GM</h2>
       <button class="btn" id="guia-edit-btn" type="button">✏️ Editar</button>
       <button class="btn dm" id="guia-save-btn" type="button" style="display:none;">💾 Guardar guía</button>
       <button class="btn" id="guia-close-btn" type="button">✕ Cerrar</button>
@@ -89,75 +102,61 @@
   </div>
 </div>
 
+<div class="modal" id="miembros-modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="miembros-title">Miembros</h2>
+      <button class="btn dm" id="miembros-save" type="button">💾 Guardar</button>
+      <button class="btn" id="miembros-close" type="button">✕ Cerrar</button>
+    </div>
+    <div class="modal-body" id="miembros-body"></div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
 <script>
 const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.app";
-const PLAYERS=[
-  {key:"Joel",icon:"🦖"},
-  {key:"Cristina",icon:"🐉"},
-  {key:"Carol",icon:"✨"},
-  {key:"Leomar",icon:"💀"},
-  {key:"Oriol",icon:"⛑️"}
-];
+
+// === CUENTAS: hash SHA-256 de la contraseña + rol ===
 const USERS={
   "Joel":"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",
+  "Didac":"a2fc86bac4cec78448d73cbd19b5e77df108a861a5d553ac1a6663fa8069cfeb",
   "Cristina":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
   "Carol":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
   "Leomar":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
-  "Oriol":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
-  "Didac":"a2fc86bac4cec78448d73cbd19b5e77df108a861a5d553ac1a6663fa8069cfeb"
+  "Oriol":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7"
 };
-const DM="Didac";
-const ADMINS=["Didac","Joel"]; // GM / Owner (mismos permisos)
-function isAdmin(u){return ADMINS.indexOf(u)>=0;}
+const ROL={ "Joel":"owner", "Didac":"gm", "Cristina":"jugador", "Carol":"jugador", "Leomar":"jugador", "Oriol":"jugador" };
+function rolDe(u){return ROL[u]||"jugador";}
+function isAdmin(u){var r=rolDe(u);return r==="owner"||r==="gm";}
 
-let LOGROS=[], unlocked={}, allProgreso={}, currentUser="", editMode=false;
-var guiaMD=null, guiaEditing=false, dragSrc=null;
+let currentUser="", currentCamp=null, campInfo=null, MIEMBROS=[], GMname="";
+let LOGROS=[], progreso={}, guiaMD=null, editMode=false;
+var guiaEditing=false, dragSrc=null, saveTimers={};
 const PREFS="rdr2_prefs_v3", SESSION="rdr2_session";
 let prefs={filtro:"todos"};
 try{prefs=Object.assign(prefs,JSON.parse(localStorage.getItem(PREFS))||{});}catch(e){}
 let state={tab:"grupo",sub:"todos",search:"",filtro:prefs.filtro||"todos"};
-var saveTimers={};
 
 const CAT_ICON={grupo:"🤝",combate:"⚔️",exploracion:"🗺️",social:"💬",botin:"💰",meme:"🤡",general:"🎯"};
 const PLAYER_ICON={Joel:"🦖",Cristina:"🐉",Carol:"✨",Leomar:"💀",Oriol:"⛑️"};
 const ICON_RULES=[
-  [["casco"],"⛑️"],
-  [["pergamino","orden de gm","orden gm"],"📜"],
-  [["caballo","establo","yegua","montura"],"🐴"],
-  [["ankylo","anky","jurasic","lomos"],"🦖"],
-  [["dragon","eidolon"],"🐉"],
-  [["backflip","voltereta","acrobac"],"🤸"],
-  [["seduc","don juan","ligar","coquet"],"😍"],
-  [["mascota"],"🐾"],
-  [["sigilo","detect","alarma","fantasma","pies de plomo"],"🥷"],
-  [["idioma","poliglota","lengua"],"🗣️"],
-  [["benidorm","congel","frio","hielo","nieve","escarcha"],"❄️"],
+  [["casco"],"⛑️"],[["pergamino","orden de gm","orden gm"],"📜"],[["caballo","establo","yegua","montura"],"🐴"],
+  [["ankylo","anky","jurasic","lomos"],"🦖"],[["dragon","eidolon"],"🐉"],[["backflip","voltereta","acrobac"],"🤸"],
+  [["seduc","don juan","ligar","coquet"],"😍"],[["mascota"],"🐾"],[["sigilo","detect","alarma","fantasma","pies de plomo"],"🥷"],
+  [["idioma","poliglota","lengua"],"🗣️"],[["benidorm","congel","frio","hielo","nieve","escarcha"],"❄️"],
   [["michelin","plato","cocina","cocinar","receta","chef","guiso"],"🍳"],
   [["pocion","brebaje","herbol","hierba","alquim","botica","ingrediente","experimento","embrujo"],"🧪"],
-  [["familiar"],"🐈‍⬛"],
-  [["dormir","duerm","dormid","adormec","ronquid","siesta","insomnio","despert","sueno"],"😴"],
+  [["familiar"],"🐈‍⬛"],[["dormir","duerm","dormid","adormec","ronquid","siesta","insomnio","despert","sueno"],"😴"],
   [["mecenas","oro","financiacion","hucha","tesoro","recompensa","monedas","regate","mercader","vender","invers"],"💰"],
   [["nigroman","no-muerto","no muerto","secuaz","minion","esqueleto","reanim","revivir","orco","sapo","marioneta"],"☠️"],
-  [["bendicion","warpriest","fervor","plegaria","sagrado","divin"],"🙏"],
-  [["curar","curacion","sanar","medico","venda"],"⛑️"],
-  [["hada","feeric","fey","silvano"],"🧚"],
-  [["mago","ribamar","arcano","torre"],"🧙"],
-  [["castillo","fortaleza"],"🏰"],
-  [["troll","gigante"],"🗿"],
-  [["ritual","altar","vidente","pista"],"🔮"],
-  [["crit","decapit"],"💥"],
-  [["arma improvisada","silla","jarra","pescado"],"🪑"],
-  [["estabiliz","moribundo","aliento"],"❤️‍🩹"],
-  [["rasguño","sin recibir"],"🛡️"],
-  [["coleccion","acumular","absurdo","ridicul"],"📦"],
-  [["leyenda","influencer","taberna"],"🌟"],
-  [["plan","operacion"],"🗺️"],
-  [["favor","aliad","amistad","migas","amig"],"🤝"],
-  [["cueva","base","hogar"],"🏚️"],
-  [["grit","vozarr","huir"],"📢"],
-  [["olivilla","aceite"],"🫒"],
-  [["palabra","hablando","negoci","mediar","convencer","mentira","trolero"],"💬"]
+  [["bendicion","warpriest","fervor","plegaria","sagrado","divin"],"🙏"],[["curar","curacion","sanar","medico","venda"],"⛑️"],
+  [["hada","feeric","fey","silvano"],"🧚"],[["mago","ribamar","arcano","torre"],"🧙"],[["castillo","fortaleza"],"🏰"],
+  [["troll","gigante"],"🗿"],[["ritual","altar","vidente","pista"],"🔮"],[["crit","decapit"],"💥"],
+  [["arma improvisada","silla","jarra","pescado"],"🪑"],[["estabiliz","moribundo","aliento"],"❤️‍🩹"],
+  [["rasguño","sin recibir"],"🛡️"],[["coleccion","acumular","absurdo","ridicul"],"📦"],[["leyenda","influencer","taberna"],"🌟"],
+  [["plan","operacion"],"🗺️"],[["favor","aliad","amistad","migas","amig"],"🤝"],[["cueva","base","hogar"],"🏚️"],
+  [["grit","vozarr","huir"],"📢"],[["olivilla","aceite"],"🫒"],[["palabra","hablando","negoci","mediar","convencer","mentira","trolero"],"💬"]
 ];
 
 function norm(s){return (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");}
@@ -209,92 +208,155 @@ function sha256hex(str){
 }
 
 function toArr(v){ if(Array.isArray(v))return v; if(v&&typeof v==="object")return Object.keys(v).map(function(k){return v[k];}); return []; }
-function isPlayer(l){return l.personaje&&PLAYERS.some(function(p){return p.key===l.personaje;});}
+function setStatus(t){var s=document.getElementById("savestatus");if(s)s.textContent=t;}
+function show(which){
+  document.getElementById("login").style.display=(which==="login")?"flex":"none";
+  document.getElementById("campaigns").style.display=(which==="camp")?"block":"none";
+  document.getElementById("app").style.display=(which==="app")?"block":"none";
+  document.getElementById("dm-fab").style.display=(which==="app"&&isAdmin(currentUser))?"inline-flex":"none";
+}
+
+// ====== LOGIN ======
+function doLogin(){
+  var name=(document.getElementById("li-user").value||"").trim();
+  var pass=document.getElementById("li-pass").value||"";
+  var key=Object.keys(USERS).find(function(k){return norm(k)===norm(name);});
+  if(key&&USERS[key]===sha256hex(pass)){
+    try{localStorage.setItem(SESSION,key);}catch(e){}
+    document.getElementById("li-err").textContent="";document.getElementById("li-pass").value="";
+    startSession(key);
+  }else{ document.getElementById("li-err").textContent="Nombre o contraseña incorrectos."; }
+}
+function startSession(user){
+  currentUser=user;
+  document.getElementById("camp-whoami").textContent="👋 "+user+" · "+rolDe(user);
+  document.getElementById("crear-camp").style.display=isAdmin(user)?"inline-block":"none";
+  showCampaigns();
+}
+
+// ====== CAMPAÑAS ======
+function showCampaigns(){ currentCamp=null; show("camp"); loadCampaigns(); }
+function loadCampaigns(){
+  var list=document.getElementById("camp-list");list.innerHTML="Cargando…";
+  fetch(FB+"/campanas.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(camps){
+    renderCampaigns(camps||{});
+  }).catch(function(){list.innerHTML='<div class="empty">No se pudieron cargar las campañas.</div>';});
+}
+function puedeEntrar(info){ return isAdmin(currentUser) || (info&&info.miembros&&info.miembros[currentUser]); }
+function renderCampaigns(camps){
+  var list=document.getElementById("camp-list");list.innerHTML="";
+  var ids=Object.keys(camps);
+  if(!ids.length){list.innerHTML='<div class="empty">No hay campañas todavía.'+(isAdmin(currentUser)?' Pulsa «Crear campaña».':'')+'</div>';return;}
+  ids.forEach(function(id){
+    var info=(camps[id]&&camps[id].info)?camps[id].info:{nombre:id};
+    var ms=info.miembros?Object.keys(info.miembros):[];
+    var entra=puedeEntrar(info);
+    var d=document.createElement("div");d.className="camp-card"+(entra?"":" locked");
+    var html='<div class="camp-ic">📜</div><div class="camp-info"><div class="camp-nombre">'+esc(info.nombre||id)+'</div><div class="camp-meta">GM: '+esc(info.gm||"—")+' · '+ms.length+' jugador(es)</div></div><div class="camp-actions"></div>';
+    d.innerHTML=html;
+    var act=d.querySelector(".camp-actions");
+    if(entra){var b=document.createElement("button");b.className="btn";b.textContent="Entrar";b.onclick=function(){entrarCampana(id);};act.appendChild(b);}
+    else{var s=document.createElement("span");s.className="rol-badge";s.textContent="🔒 No asignado";act.appendChild(s);}
+    if(isAdmin(currentUser)){var mb=document.createElement("button");mb.className="btn dm";mb.textContent="👥 Miembros";mb.onclick=function(){abrirMiembros(id,info);};act.appendChild(mb);}
+    list.appendChild(d);
+  });
+}
+function crearCampana(){
+  if(!isAdmin(currentUser))return;
+  var nombre=(window.prompt("Nombre de la nueva campaña:","")||"").trim();
+  if(!nombre)return;
+  var id=slug(nombre)||("camp-"+(new Date().getTime()));
+  var info={nombre:nombre,gm:currentUser,miembros:{}};
+  setStatus("Creando…");
+  fetch(FB+"/campanas/"+id+"/info.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(info)})
+    .then(function(){return fetch(FB+"/campanas/"+id+"/logros.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify([])});})
+    .then(function(){alert("✅ Campaña «"+nombre+"» creada. Ahora pulsa «👥 Miembros» para asignar jugadores.");loadCampaigns();})
+    .catch(function(){alert("No se pudo crear la campaña.");});
+}
+var miembrosCampId=null;
+function abrirMiembros(id,info){
+  miembrosCampId=id;
+  document.getElementById("miembros-title").textContent="Miembros — "+(info.nombre||id);
+  var body=document.getElementById("miembros-body");
+  var html='<p style="color:var(--muted);font-size:13px;margin:0 0 12px;">Marca quién puede entrar y tener su lista en esta campaña.</p><div class="miembros-list">';
+  Object.keys(USERS).forEach(function(u){
+    var checked=(info.miembros&&info.miembros[u])?" checked":"";
+    var rb='<span class="rol-badge rol-'+rolDe(u)+'">'+rolDe(u)+'</span>';
+    html+='<label><input type="checkbox" value="'+esc(u)+'"'+checked+'> '+esc(u)+rb+'</label>';
+  });
+  html+='</div>';
+  body.innerHTML=html;
+  document.getElementById("miembros-modal").classList.add("open");
+}
+function guardarMiembros(){
+  if(!miembrosCampId)return;
+  var ins=document.querySelectorAll("#miembros-body input[type=checkbox]");
+  var m={};for(var i=0;i<ins.length;i++){if(ins[i].checked)m[ins[i].value]=true;}
+  setStatus("Guardando…");
+  fetch(FB+"/campanas/"+miembrosCampId+"/info/miembros.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(m)})
+    .then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");document.getElementById("miembros-modal").classList.remove("open");loadCampaigns();})
+    .catch(function(){setStatus("⚠ Sin conexión");});
+}
+
+function ordenMiembros(obj){
+  var keys=Object.keys(obj||{});var pref=["Joel","Cristina","Carol","Leomar","Oriol"];
+  keys.sort(function(a,b){var ia=pref.indexOf(a),ib=pref.indexOf(b);if(ia<0)ia=99;if(ib<0)ib=99;return (ia-ib)||a.localeCompare(b);});
+  return keys;
+}
+function entrarCampana(id){
+  setStatus("Cargando…");
+  fetch(FB+"/campanas/"+id+".json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(c){
+    if(!c||!c.info){alert("Campaña no encontrada.");return;}
+    if(!puedeEntrar(c.info)){alert("No estás asignado a esta campaña.");return;}
+    currentCamp=id;campInfo=c.info;GMname=c.info.gm||"";MIEMBROS=ordenMiembros(c.info.miembros);
+    LOGROS=toArr(c.logros);progreso=c.progreso||{};guiaMD=(typeof c.guia==="string")?c.guia:null;
+    state.tab="grupo";state.sub="todos";
+    document.getElementById("camp-nombre").textContent=esc(c.info.nombre||id);
+    document.getElementById("camp-rol").textContent="Tú: "+currentUser+" ("+rolDe(currentUser)+")";
+    document.getElementById("whoami").textContent="👋 "+currentUser;
+    show("app");setStatus("");render();
+  }).catch(function(){alert("No se pudo cargar la campaña.");});
+}
+
+// ====== LOGROS dentro de campaña ======
+function isPlayer(l){return l.personaje&&MIEMBROS.indexOf(l.personaje)>=0;}
 function viewLogros(){
   if(state.tab==="grupo")return LOGROS.filter(function(l){return l.categoria==="grupo";});
   if(state.sub==="todos")return LOGROS.filter(function(l){return l.categoria!=="grupo"&&!isPlayer(l);});
   return LOGROS.filter(function(l){return l.personaje===state.sub;});
 }
-function stats(arr){var u=0;arr.forEach(function(l){if(unlocked[slug(l.nombre)])u++;});return{u:u,t:arr.length};}
-function aggCount(sl){var n=0;PLAYERS.forEach(function(p){var pr=allProgreso[p.key];if(pr&&pr[sl])n++;});return n;}
-function nombreOf(id){for(var i=0;i<LOGROS.length;i++){if(slug(LOGROS[i].nombre)===id)return LOGROS[i].nombre;}return id;}
+function isDone(l){return !!progreso[slug(l.nombre)];}
+function stats(arr){var u=0;arr.forEach(function(l){if(isDone(l))u++;});return{u:u,t:arr.length};}
+function puedeMarcar(l){ return isAdmin(currentUser) || !!(l.personaje && l.personaje===currentUser); }
 
-function setStatus(t){var s=document.getElementById("savestatus");if(s)s.textContent=t;}
-function fbMark(user,sl,date){setStatus("Guardando…");return fetch(FB+"/estado/progreso/"+encodeURIComponent(user)+"/"+sl+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(date)}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});}
-function fbUnmark(user,sl){setStatus("Guardando…");return fetch(FB+"/estado/progreso/"+encodeURIComponent(user)+"/"+sl+".json",{method:"DELETE"}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});}
-function saveLogros(){setStatus("Guardando…");fetch(FB+"/estado/logros.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(LOGROS)}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});}
-function saveGuia(){if(guiaEditing)guiaMD=document.getElementById("guia-edit").value;setStatus("Guardando…");fetch(FB+"/estado/guia.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(guiaMD||"")}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");alert(r.ok?"✅ Guía guardada para todo el grupo.":"⚠ No se pudo guardar.");}).catch(function(){setStatus("⚠ Sin conexión");});}
+function fbProg(id,val){
+  setStatus("Guardando…");
+  var url=FB+"/campanas/"+currentCamp+"/progreso/"+id+".json";
+  var opt=val?{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(val)}:{method:"DELETE"};
+  fetch(url,opt).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});
+}
+function saveLogros(){setStatus("Guardando…");fetch(FB+"/campanas/"+currentCamp+"/logros.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(LOGROS)}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});}
+function saveGuia(){if(guiaEditing)guiaMD=document.getElementById("guia-edit").value;setStatus("Guardando…");fetch(FB+"/campanas/"+currentCamp+"/guia.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(guiaMD||"")}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");alert(r.ok?"✅ Guía guardada.":"⚠ No se pudo guardar.");}).catch(function(){setStatus("⚠ Sin conexión");});}
 function debounce(key,fn){if(saveTimers[key])clearTimeout(saveTimers[key]);saveTimers[key]=setTimeout(fn,700);}
 
-function loadData(){
-  setStatus("Cargando…");
-  fetch(FB+"/estado.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(est){
-    if(est&&est.logros){
-      LOGROS=toArr(est.logros);
-      allProgreso=est.progreso||{};
-      unlocked=allProgreso[currentUser]||{};
-      guiaMD=(typeof est.guia==="string")?est.guia:guiaMD;
-      setStatus("");render();
-    } else { gitFallback(); }
-  }).catch(function(){ gitFallback(); });
-}
-function gitFallback(){
-  setStatus("⚠ Sin conexión con la nube (modo lectura)");
-  fetch("logros.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():[];}).catch(function(){return [];}).then(function(a){LOGROS=a||[];unlocked={};allProgreso={};render();});
+function toggle(l){
+  if(!puedeMarcar(l)){return;}
+  var id=slug(l.nombre),y=window.scrollY;
+  if(progreso[id]){ delete progreso[id]; fbProg(id,null); render(); window.scrollTo(0,y); }
+  else { var o={por:currentUser,fecha:new Date().toISOString()}; progreso[id]=o; fbProg(id,o); render(); window.scrollTo(0,y); celebrate(l.nombre); }
 }
 
 function celebrate(nombre){ toast(nombre); playSound(); confetti(); }
 function toast(nombre){
   var t=document.createElement("div");t.className="toast";
   t.innerHTML='<div class="toast-ico">🏆</div><div><div class="toast-t">¡Logro desbloqueado!</div><div class="toast-n">'+esc(nombre)+'</div></div>';
-  document.body.appendChild(t);
-  setTimeout(function(){t.classList.add("show");},20);
+  document.body.appendChild(t);setTimeout(function(){t.classList.add("show");},20);
   setTimeout(function(){t.classList.remove("show");setTimeout(function(){t.remove();},420);},3200);
 }
-function playSound(){
-  try{
-    var AC=window.AudioContext||window.webkitAudioContext; if(!AC)return;
-    var ctx=new AC(),notes=[523.25,659.25,783.99,1046.5];
-    notes.forEach(function(f,i){
-      var o=ctx.createOscillator(),g=ctx.createGain();o.type="triangle";o.frequency.value=f;
-      o.connect(g);g.connect(ctx.destination);
-      var t=ctx.currentTime+i*0.10;
-      g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.22,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+0.26);
-      o.start(t);o.stop(t+0.28);
-    });
-  }catch(e){}
-}
-function confetti(){
-  var colors=["#f0c33c","#66c0f4","#a4d007","#ff6b6b","#a653ff","#ffffff"];
-  for(var i=0;i<42;i++){
-    var d=document.createElement("div");d.className="confetti";
-    d.style.left=(Math.random()*100)+"vw";
-    d.style.background=colors[i%colors.length];
-    d.style.animationDelay=(Math.random()*0.25)+"s";
-    d.style.animationDuration=(1.6+Math.random()*0.9)+"s";
-    document.body.appendChild(d);
-    (function(el){setTimeout(function(){el.remove();},2700);})(d);
-  }
-}
+function playSound(){try{var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;var ctx=new AC(),notes=[523.25,659.25,783.99,1046.5];notes.forEach(function(f,i){var o=ctx.createOscillator(),g=ctx.createGain();o.type="triangle";o.frequency.value=f;o.connect(g);g.connect(ctx.destination);var t=ctx.currentTime+i*0.10;g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.22,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+0.26);o.start(t);o.stop(t+0.28);});}catch(e){}}
+function confetti(){var colors=["#f0c33c","#66c0f4","#a4d007","#ff6b6b","#a653ff","#ffffff"];for(var i=0;i<42;i++){var d=document.createElement("div");d.className="confetti";d.style.left=(Math.random()*100)+"vw";d.style.background=colors[i%colors.length];d.style.animationDelay=(Math.random()*0.25)+"s";d.style.animationDuration=(1.6+Math.random()*0.9)+"s";document.body.appendChild(d);(function(el){setTimeout(function(){el.remove();},2700);})(d);}}
 
-function toggle(id){
-  var y=window.scrollY;
-  if(unlocked[id]){ delete unlocked[id]; fbUnmark(currentUser,id); allProgreso[currentUser]=unlocked; render(); window.scrollTo(0,y); }
-  else { var d=new Date().toISOString(); unlocked[id]=d; fbMark(currentUser,id,d); allProgreso[currentUser]=unlocked; render(); window.scrollTo(0,y); celebrate(nombreOf(id)); }
-}
-function resetMio(){
-  if(!confirm("¿Desmarcar TODOS tus logros? (solo los tuyos)"))return;
-  unlocked={};allProgreso[currentUser]={};
-  setStatus("Guardando…");
-  fetch(FB+"/estado/progreso/"+encodeURIComponent(currentUser)+".json",{method:"DELETE"}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});
-  render();
-}
-
-function deleteLogro(l){
-  if(!confirm('¿Borrar el logro "'+l.nombre+'"? Se borra para todo el grupo.'))return;
-  var i=LOGROS.indexOf(l);if(i>=0)LOGROS.splice(i,1);
-  render();saveLogros();
-}
+function deleteLogro(l){ if(!confirm('¿Borrar el logro "'+l.nombre+'"? (para toda la campaña)'))return; var i=LOGROS.indexOf(l);if(i>=0)LOGROS.splice(i,1); render();saveLogros(); }
 function addLogro(){
   var n=(document.getElementById("add-nombre").value||"").trim();
   if(!n){alert("Pon al menos un nombre.");return;}
@@ -302,51 +364,38 @@ function addLogro(){
   if(state.tab==="grupo"){nuevo.categoria="grupo";}
   else if(state.sub!=="todos"){nuevo.categoria="pj:"+state.sub;nuevo.personaje=state.sub;}
   else{nuevo.categoria="general";}
-  LOGROS.push(nuevo);
-  render();saveLogros();
+  LOGROS.push(nuevo);render();saveLogros();
 }
-function moveLogro(l,dir){
-  var view=viewLogros();var iv=view.indexOf(l);var t=iv+dir;
-  if(t<0||t>=view.length)return;
-  var other=view[t];var i1=LOGROS.indexOf(l),i2=LOGROS.indexOf(other);
-  if(i1<0||i2<0)return;
-  var tmp=LOGROS[i1];LOGROS[i1]=LOGROS[i2];LOGROS[i2]=tmp;
-  render();debounce("ord",saveLogros);
-}
+function moveLogro(l,dir){var view=viewLogros();var iv=view.indexOf(l);var t=iv+dir;if(t<0||t>=view.length)return;var other=view[t];var i1=LOGROS.indexOf(l),i2=LOGROS.indexOf(other);if(i1<0||i2<0)return;var tmp=LOGROS[i1];LOGROS[i1]=LOGROS[i2];LOGROS[i2]=tmp;render();debounce("ord",saveLogros);}
 
 function mdRender(md){ try{ if(window.marked){ return marked.parse?marked.parse(md):marked(md); } }catch(e){} return '<pre style="white-space:pre-wrap;word-break:break-word;">'+esc(md)+'</pre>'; }
-function renderGuia(){
-  var v=document.getElementById("guia-view"),e=document.getElementById("guia-edit");
-  var eb=document.getElementById("guia-edit-btn"),sb=document.getElementById("guia-save-btn");
-  if(guiaEditing){ e.value=guiaMD||""; e.style.display="block"; v.style.display="none"; sb.style.display="inline-block"; eb.textContent="👁 Vista"; }
-  else { v.innerHTML=mdRender(guiaMD||"_(Guía vacía. Pulsa Editar para escribirla.)_"); v.style.display="block"; e.style.display="none"; sb.style.display="none"; eb.textContent="✏️ Editar"; }
-}
-function openGuia(){
-  document.getElementById("guia-modal").classList.add("open");
-  if(guiaMD===null){ document.getElementById("guia-view").innerHTML="Cargando…"; fetch("guia.md?x="+(new Date().getTime())).then(function(r){return r.ok?r.text():"";}).then(function(t){guiaMD=t;renderGuia();}).catch(function(){guiaMD="(No se pudo cargar la guía)";renderGuia();}); }
-  else renderGuia();
-}
-function closeGuia(){ document.getElementById("guia-modal").classList.remove("open"); }
-function toggleGuiaEdit(){ if(guiaEditing){ guiaMD=document.getElementById("guia-edit").value; guiaEditing=false; } else { guiaEditing=true; } renderGuia(); }
+function renderGuia(){var v=document.getElementById("guia-view"),e=document.getElementById("guia-edit"),eb=document.getElementById("guia-edit-btn"),sb=document.getElementById("guia-save-btn");if(guiaEditing){e.value=guiaMD||"";e.style.display="block";v.style.display="none";sb.style.display="inline-block";eb.textContent="👁 Vista";}else{v.innerHTML=mdRender(guiaMD||"_(Guía vacía. Pulsa Editar para escribirla.)_");v.style.display="block";e.style.display="none";sb.style.display="none";eb.textContent="✏️ Editar";}}
+function openGuia(){document.getElementById("guia-modal").classList.add("open");renderGuia();}
+function closeGuia(){document.getElementById("guia-modal").classList.remove("open");}
+function toggleGuiaEdit(){if(guiaEditing){guiaMD=document.getElementById("guia-edit").value;guiaEditing=false;}else{guiaEditing=true;}renderGuia();}
 
 function openResumen(){
   document.getElementById("resumen-modal").classList.add("open");
   var body=document.getElementById("resumen-body");body.innerHTML="Cargando…";
-  fetch(FB+"/estado/progreso.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():{};}).then(function(prog){
+  fetch(FB+"/campanas/"+currentCamp+"/progreso.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():{};}).then(function(prog){
     prog=prog||{};
-    var total=LOGROS.length;
-    var html='<table class="resumen-table"><tr><th>Jugador</th><th>Conseguidos</th><th>Progreso</th></tr>';
-    PLAYERS.forEach(function(p){
-      var pr=prog[p.key]||{};var n=Object.keys(pr).length;var pct=total?Math.round(n/total*100):0;
-      html+='<tr><td>'+p.icon+' '+esc(p.key)+'</td><td class="num">'+n+' / '+total+'</td><td><div class="rbar"><i style="width:'+pct+'%"></i></div></td></tr>';
+    function doneIn(arr){var n=0;arr.forEach(function(l){if(prog[slug(l.nombre)])n++;});return n;}
+    var html='<table class="resumen-table"><tr><th>Lista</th><th>Conseguidos</th><th>Progreso</th></tr>';
+    MIEMBROS.forEach(function(m){
+      var arr=LOGROS.filter(function(l){return l.personaje===m;});var n=doneIn(arr),t=arr.length,pct=t?Math.round(n/t*100):0;
+      html+='<tr><td>'+(PLAYER_ICON[m]||"👤")+' '+esc(m)+'</td><td class="num">'+n+' / '+t+'</td><td><div class="rbar"><i style="width:'+pct+'%"></i></div></td></tr>';
     });
+    var gr=LOGROS.filter(function(l){return l.categoria==="grupo";});var co=LOGROS.filter(function(l){return l.categoria!=="grupo"&&!isPlayer(l);});
+    var gn=doneIn(gr),cn=doneIn(co);
+    html+='<tr><td>🤝 Grupo</td><td class="num">'+gn+' / '+gr.length+'</td><td><div class="rbar"><i style="width:'+(gr.length?Math.round(gn/gr.length*100):0)+'%"></i></div></td></tr>';
+    html+='<tr><td>🌐 Para todos</td><td class="num">'+cn+' / '+co.length+'</td><td><div class="rbar"><i style="width:'+(co.length?Math.round(cn/co.length*100):0)+'%"></i></div></td></tr>';
     html+='</table>';
-    var tocados=0;for(var i=0;i<LOGROS.length;i++){var sl=slug(LOGROS[i].nombre);var hay=false;PLAYERS.forEach(function(p){if(prog[p.key]&&prog[p.key][sl])hay=true;});if(hay)tocados++;}
-    html+='<p style="margin-top:14px;color:var(--muted);font-size:13px;">Logros conseguidos por al menos un jugador: <b style="color:var(--accent)">'+tocados+' / '+total+'</b>.</p>';
+    var tot=Object.keys(prog).length;
+    html+='<p style="margin-top:14px;color:var(--muted);font-size:13px;">Total de logros conseguidos en la campaña: <b style="color:var(--accent)">'+tot+' / '+LOGROS.length+'</b>.</p>';
     body.innerHTML=html;
   }).catch(function(){body.innerHTML="No se pudo cargar el resumen.";});
 }
-function closeResumen(){ document.getElementById("resumen-modal").classList.remove("open"); }
+function closeResumen(){document.getElementById("resumen-modal").classList.remove("open");}
 
 function renderTabs(){
   var sg=stats(LOGROS.filter(function(l){return l.categoria==="grupo";}));
@@ -355,33 +404,29 @@ function renderTabs(){
   [["grupo","🛡️ Grupo",sg],["ind","👤 Individuales",si]].forEach(function(row){
     var b=document.createElement("button");b.className="tab"+((state.tab===row[0])?" active":"");
     b.innerHTML=row[1]+'<span class="c">'+row[2].u+"/"+row[2].t+"</span>";
-    b.onclick=function(){state.tab=row[0];render();};
-    mt.appendChild(b);
+    b.onclick=function(){state.tab=row[0];render();};mt.appendChild(b);
   });
   var sw=document.getElementById("subtabs");
   if(state.tab!=="ind"){sw.innerHTML="";return;}
   sw.innerHTML='<div class="subtabs" id="st"></div>';
   var st=document.getElementById("st");
   var groups=[{key:"todos",icon:"🌐",label:"Para todos",arr:LOGROS.filter(function(l){return l.categoria!=="grupo"&&!isPlayer(l);})}];
-  PLAYERS.forEach(function(p){groups.push({key:p.key,icon:p.icon,label:p.key,arr:LOGROS.filter(function(l){return l.personaje===p.key;})});});
+  MIEMBROS.forEach(function(m){groups.push({key:m,icon:(PLAYER_ICON[m]||"👤"),label:m,arr:LOGROS.filter(function(l){return l.personaje===m;})});});
   groups.forEach(function(g){
     var s=stats(g.arr);var b=document.createElement("button");b.className="subtab"+((state.sub===g.key)?" active":"");
     b.innerHTML=g.icon+" "+g.label+'<span class="c">'+s.u+"/"+s.t+"</span>";
-    b.onclick=function(){state.sub=g.key;render();};
-    st.appendChild(b);
+    b.onclick=function(){state.sub=g.key;render();};st.appendChild(b);
   });
 }
 function buildAddForm(){
   var d=document.createElement("div");d.className="addbox";
   var dest=state.tab==="grupo"?"Grupo":(state.sub==="todos"?"Para todos":state.sub);
   d.innerHTML='<input class="an" id="add-nombre" placeholder="Nombre del nuevo logro (va a: '+esc(dest)+')"><input class="ad" id="add-desc" placeholder="Descripción"><input class="ar" id="add-recompensa" placeholder="Recompensa"><button class="btn dm" id="add-btn" type="button">➕ Añadir</button>';
-  d.querySelector("#add-btn").addEventListener("click",addLogro);
-  return d;
+  d.querySelector("#add-btn").addEventListener("click",addLogro);return d;
 }
 function buildCard(l){
-  var id=slug(l.nombre),on=!!unlocked[id];
+  var id=slug(l.nombre),on=isDone(l),puede=puedeMarcar(l);
   var div=document.createElement("div");div.className="ach"+(on?" on":"")+(editMode?" editing":"");
-  var ag=aggCount(id);
   var html='<div class="ic">'+getIcon(l)+(on?'<span class="vbadge">✓</span>':"")+'</div>';
   if(editMode){
     html+='<div class="movebtns"><button class="movebtn" data-d="-1" title="Subir">▲</button><button class="movebtn" data-d="1" title="Bajar">▼</button></div>';
@@ -390,19 +435,19 @@ function buildCard(l){
   } else {
     html+='<div class="info"><div class="nm">'+esc(l.nombre)+difBadge(l)+'</div><div class="ds">'+esc(l.descripcion)+'</div>';
     if(l.recompensa)html+='<div class="rw">🎁 '+esc(l.recompensa)+'</div>';
-    if(on)html+='<div class="fecha">✓ Conseguido el '+fmtFecha(unlocked[id])+'</div>';
-    html+='<div class="agg">👥 <b>'+ag+'</b>/'+PLAYERS.length+' jugadores</div>';
+    if(on){var p=progreso[id]||{};html+='<div class="fecha">✓ Conseguido el '+fmtFecha(p.fecha)+(p.por?' · por '+esc(p.por):"")+'</div>';}
     html+='</div>';
   }
-  html+='<label class="toggle"><input type="checkbox"'+(on?" checked":"")+'><span>'+(on?"Conseguido":"Marcar")+'</span></label>';
+  var tg='<label class="toggle'+(puede?"":" disabled")+'"'+(puede?"":' title="Solo lo marca su dueño o el GM"')+'><input type="checkbox"'+(on?" checked":"")+(puede?"":" disabled")+'><span>'+(on?"Conseguido":(puede?"Marcar":"🔒"))+'</span></label>';
+  html+=tg;
   div.innerHTML=html;
-  div.querySelector(".toggle input").addEventListener("change",function(){toggle(id);});
+  if(puede){var cb=div.querySelector(".toggle input");if(cb)cb.addEventListener("change",function(){toggle(l);});}
   if(editMode){
     var nm=div.querySelector(".nm-input");if(nm)nm.addEventListener("change",function(){l.nombre=nm.value;render();saveLogros();});
     var ds=div.querySelector(".ds-input");if(ds)ds.addEventListener("change",function(){l.descripcion=ds.value;debounce("l",saveLogros);});
     var ri=div.querySelector(".rw-input");if(ri)ri.addEventListener("input",function(){l.recompensa=ri.value;debounce("l",saveLogros);});
     var di=div.querySelector(".dif-input");if(di)di.addEventListener("change",function(){if(di.value)l.dificultad=di.value;else delete l.dificultad;render();saveLogros();});
-    var db=div.querySelector(".del");if(db)db.addEventListener("click",function(){deleteLogro(l);});
+    var dl=div.querySelector(".del");if(dl)dl.addEventListener("click",function(){deleteLogro(l);});
     var mb=div.querySelectorAll(".movebtn");for(var b=0;b<mb.length;b++){(function(btn){btn.addEventListener("click",function(){moveLogro(l,parseInt(btn.getAttribute("data-d"),10));});})(mb[b]);}
     div.setAttribute("draggable","true");
     div.addEventListener("dragstart",function(e){dragSrc=l;div.classList.add("dragging");try{e.dataTransfer.effectAllowed="move";}catch(x){}});
@@ -415,8 +460,8 @@ function buildCard(l){
 }
 function renderList(){
   var arr=viewLogros();
-  if(state.filtro==="pend")arr=arr.filter(function(l){return !unlocked[slug(l.nombre)];});
-  else if(state.filtro==="hechos")arr=arr.filter(function(l){return !!unlocked[slug(l.nombre)];});
+  if(state.filtro==="pend")arr=arr.filter(function(l){return !isDone(l);});
+  else if(state.filtro==="hechos")arr=arr.filter(function(l){return isDone(l);});
   var q=norm(state.search);
   if(q)arr=arr.filter(function(l){return norm(l.nombre+" "+l.descripcion).indexOf(q)>=0;});
   var list=document.getElementById("list");list.innerHTML="";
@@ -429,7 +474,7 @@ function renderGlobal(){
   document.getElementById("g-count").textContent=s.u+"/"+s.t;
   var pct=s.t?Math.round(s.u/s.t*100):0;
   document.getElementById("g-fill").style.width=pct+"%";
-  document.getElementById("g-perfect").textContent=(s.u===s.t&&s.t>0)?"🏅 ¡Todos tus logros conseguidos!":(pct+"% completado");
+  document.getElementById("g-perfect").textContent=(s.u===s.t&&s.t>0)?"🏅 ¡Campaña completada!":(pct+"% de la campaña");
 }
 function render(){
   document.getElementById("editwrap").style.display=isAdmin(currentUser)?"flex":"none";
@@ -438,39 +483,28 @@ function render(){
   renderTabs();renderList();renderGlobal();
 }
 
+// ====== wiring ======
 document.getElementById("search").addEventListener("input",function(e){state.search=e.target.value;renderList();});
 var fsel=document.getElementById("filtro");fsel.value=state.filtro;
 fsel.addEventListener("change",function(e){state.filtro=e.target.value;prefs.filtro=state.filtro;try{localStorage.setItem(PREFS,JSON.stringify(prefs));}catch(x){}renderList();});
 document.getElementById("t-edit").addEventListener("change",function(e){editMode=e.target.checked;render();});
-document.getElementById("reset").addEventListener("click",resetMio);
 document.getElementById("resumenbtn").addEventListener("click",openResumen);
+document.getElementById("volver").addEventListener("click",function(){editMode=false;var te=document.getElementById("t-edit");if(te)te.checked=false;showCampaigns();});
+document.getElementById("crear-camp").addEventListener("click",crearCampana);
+document.getElementById("miembros-save").addEventListener("click",guardarMiembros);
+document.getElementById("miembros-close").addEventListener("click",function(){document.getElementById("miembros-modal").classList.remove("open");});
+document.getElementById("miembros-modal").addEventListener("click",function(e){if(e.target.id==="miembros-modal")document.getElementById("miembros-modal").classList.remove("open");});
 
-function startApp(user){
-  currentUser=user;editMode=false;
-  if(PLAYERS.some(function(p){return p.key===user;}))state.sub=user;
-  var te=document.getElementById("t-edit");if(te)te.checked=false;
-  document.getElementById("login").style.display="none";
-  document.getElementById("app").style.display="block";
-  document.getElementById("whoami").textContent="👋 "+user;
-  loadData();
-}
-function doLogin(){
-  var name=(document.getElementById("li-user").value||"").trim();
-  var pass=document.getElementById("li-pass").value||"";
-  var key=Object.keys(USERS).find(function(k){return norm(k)===norm(name);});
-  if(key&&USERS[key]===sha256hex(pass)){
-    try{localStorage.setItem(SESSION,key);}catch(e){}
-    document.getElementById("li-err").textContent="";document.getElementById("li-pass").value="";
-    startApp(key);
-  }else{ document.getElementById("li-err").textContent="Nombre o contraseña incorrectos."; }
-}
+function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reload();}
+
 (function(){
   var dl=document.getElementById("userlist");
   Object.keys(USERS).forEach(function(u){var o=document.createElement("option");o.value=u;dl.appendChild(o);});
   document.getElementById("li-btn").addEventListener("click",doLogin);
   document.getElementById("li-pass").addEventListener("keydown",function(e){if(e.key==="Enter")doLogin();});
   document.getElementById("li-user").addEventListener("keydown",function(e){if(e.key==="Enter")document.getElementById("li-pass").focus();});
-  document.getElementById("logout").addEventListener("click",function(){try{localStorage.removeItem(SESSION);}catch(e){}location.reload();});
+  document.getElementById("logout").addEventListener("click",logout);
+  document.getElementById("camp-logout").addEventListener("click",logout);
   document.getElementById("dm-fab").addEventListener("click",openGuia);
   document.getElementById("guia-close-btn").addEventListener("click",closeGuia);
   document.getElementById("guia-edit-btn").addEventListener("click",toggleGuiaEdit);
@@ -479,7 +513,7 @@ function doLogin(){
   document.getElementById("resumen-close").addEventListener("click",closeResumen);
   document.getElementById("resumen-modal").addEventListener("click",function(e){if(e.target.id==="resumen-modal")closeResumen();});
   var sess="";try{sess=localStorage.getItem(SESSION)||"";}catch(e){}
-  if(sess&&Object.prototype.hasOwnProperty.call(USERS,sess))startApp(sess);
+  if(sess&&Object.prototype.hasOwnProperty.call(USERS,sess))startSession(sess); else show("login");
 })();
 </script>
 </body>
