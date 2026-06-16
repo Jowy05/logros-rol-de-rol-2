@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RolCampaingAwardSystem</title>
-<link rel="stylesheet" href="styles.css?v=7">
+<link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
 
@@ -68,6 +68,7 @@
       <option value="pend">Pendientes</option>
       <option value="hechos">Conseguidos</option>
     </select>
+    <button class="btn" id="nombtn">🏅 Nominaciones</button>
     <label class="ck" id="editwrap" style="display:none;"><input type="checkbox" id="t-edit"> ✏️ Modo edición</label>
     <button class="btn dm" id="resumenbtn" style="display:none;">📊 Resumen</button>
     <button class="btn dm" id="lockbtn" style="display:none;">🔒 Bloquear</button>
@@ -167,8 +168,30 @@
   </div>
 </div>
 
+<div class="modal" id="nom-modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>🏅 Nominaciones</h2>
+      <button class="btn dm" id="nom-nueva" type="button" style="display:none;">➕ Nueva sesión</button>
+      <button class="btn" id="nom-close" type="button">✕ Cerrar</button>
+    </div>
+    <div class="modal-body" id="nom-body"></div>
+  </div>
+</div>
+
+<div class="modal" id="logro-modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="logro-modal-title">Logro</h2>
+      <button class="btn" id="logro-close" type="button">✕ Cerrar</button>
+    </div>
+    <div class="modal-body" id="logro-body"></div>
+  </div>
+</div>
+
 <input type="file" id="foto-input" accept="image/*" style="display:none">
 <input type="file" id="icono-input" accept="image/*" style="display:none">
+<input type="file" id="backup-input" accept=".json,application/json" style="display:none">
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
 <script>
@@ -315,6 +338,36 @@ function difSelect(l){var s='<select class="dif-input">';for(var i=0;i<DIFS.leng
 // XP por rareza y curva de nivel (lvl1=50, +10 cada nivel).
 function xpDeRareza(d){var k=difKey(d);return k==="legendario"?150:(k==="epico"?60:(k==="raro"?25:10));}
 function nivelDeXP(xp){var lvl=1,need=50,acc=0;while(xp>=acc+need){acc+=need;lvl++;need+=10;}return {lvl:lvl,en:xp-acc,need:need,total:xp};}
+// Marco del avatar según nivel: 1-5 sin marco, 6-15 común, 16-25 raro, 26-35 épico, 36+ legendario (colores de rareza).
+function marcoNivel(lvl){ if(lvl<=5)return ""; return ["comun","raro","epico","legendario"][Math.min(Math.floor((lvl-6)/10),3)]; }
+var NOM_CATS=["Mejor acción de la sesión","Peor acción de la sesión","Acción más divertida","MVP de los combates"];
+// Resumen de cuenta de un usuario a partir de TODAS las campañas: XP, nivel, prestigio, premios y logros.
+// XP: logros propios x1; si eres el GM CREADOR de la campaña, los de grupo cuentan para ti x2 y los individuales un 50%.
+// Prestigio: +1 estrella y +500 XP por cada campaña tuya que esté bloqueada (terminada).
+function computarCuenta(camps,user){
+  camps=camps||{};
+  var misCamps=[],total=0,xpTotal=0,prestigio=0,premios={};
+  Object.keys(camps).forEach(function(id){
+    var c=camps[id]; if(!c||!c.info)return; var info=c.info;
+    var esMiembro=(info.gm===user)||(info.miembros&&info.miembros[user])||(info.gms&&info.gms[user]);
+    var esCreador=(info.gm===user);
+    var logros=toArr(c.logros),prog=c.progreso||{},tiles=[],xpCamp=0;
+    logros.forEach(function(l){
+      var s=slug(l.nombre); if(!prog[s])return;
+      var esGrupo=(l.categoria==="grupo");
+      var esMio=(l.personaje===user)||(prog[s].por===user);
+      if(esMio){ tiles.push(l); xpCamp+=xpDeRareza(l.dificultad); }
+      else if(esCreador){ if(esGrupo){ tiles.push(l); xpCamp+=xpDeRareza(l.dificultad)*2; } else { xpCamp+=Math.round(xpDeRareza(l.dificultad)*0.5); } }
+    });
+    if(!esMiembro && tiles.length===0) return;
+    if(info.bloqueada){ prestigio++; xpCamp+=500; }
+    total+=tiles.length; xpTotal+=xpCamp;
+    misCamps.push({id:id,nombre:info.nombre||id,foto:info.foto||null,gm:info.gm,bloqueada:!!info.bloqueada,logros:tiles});
+    var noms=c.nominaciones||{};
+    Object.keys(noms).forEach(function(sid){ var v=noms[sid]&&noms[sid].votos; if(!v)return; Object.keys(v).forEach(function(cat){ var vv=v[cat]||{}; Object.keys(vv).forEach(function(voter){ if(vv[voter]===user)premios[cat]=(premios[cat]||0)+1; }); }); });
+  });
+  return {misCamps:misCamps,total:total,xpTotal:xpTotal,nivel:nivelDeXP(xpTotal),prestigio:prestigio,premios:premios};
+}
 
 function utf8bytes(str){
   if(typeof TextEncoder!=="undefined")return new TextEncoder().encode(str);
@@ -360,8 +413,8 @@ function show(which){
 }
 
 // ====== PERFIL ======
-var miPerfilFoto=null, perfilLogros=[];
-function avatarChip(){ return miPerfilFoto?('<img class="avatar-sm" src="'+miPerfilFoto+'" alt="">'):('<span class="avatar-ini">'+esc((currentUser||"?").charAt(0).toUpperCase())+'</span>'); }
+var miPerfilFoto=null, perfilLogros=[], perfilUser=null, miNivelCuenta=1, pendingLogroSlug=null;
+function avatarChip(){ var mc=marcoNivel(miNivelCuenta),cls=mc?(" mn-"+mc):""; return miPerfilFoto?('<img class="avatar-sm'+cls+'" src="'+miPerfilFoto+'" alt="">'):('<span class="avatar-ini'+cls+'">'+esc((currentUser||"?").charAt(0).toUpperCase())+'</span>'); }
 function updateWhoami(){
   var base='<span class="who-name">'+esc(currentUser)+'</span>';
   var w1=document.getElementById("camp-whoami"); if(w1)w1.innerHTML=avatarChip()+base+'<span class="who-rol">'+rolDe(currentUser)+'</span>';
@@ -371,10 +424,18 @@ function loadMiPerfil(cb){
   var t=new Date().getTime();
   Promise.all([
     fetch(FB+"/perfiles/"+encodeURIComponent(currentUser)+"/foto.json?x="+t).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;}),
-    fetch(FB+"/perfiles/"+encodeURIComponent(currentUser)+"/vitrina.json?x="+t).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;})
-  ]).then(function(a){ miPerfilFoto=(typeof a[0]==="string")?a[0]:null; miVitrina=Array.isArray(a[1])?a[1]:[]; if(cb)cb(); });
+    fetch(FB+"/perfiles/"+encodeURIComponent(currentUser)+"/vitrina.json?x="+t).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;}),
+    fetch(FB+"/campanas.json?x="+t).then(function(r){return r.ok?r.json():{};}).catch(function(){return {};})
+  ]).then(function(a){ miPerfilFoto=(typeof a[0]==="string")?a[0]:null; miVitrina=Array.isArray(a[1])?a[1]:[]; miNivelCuenta=computarCuenta(a[2]||{},currentUser).nivel.lvl; if(cb)cb(); });
 }
-function openPerfil(){document.getElementById("perfil-modal").classList.add("open");renderPerfil();}
+function openPerfil(user){
+  perfilUser=(typeof user==="string"&&user)?user:currentUser;
+  var propio=(perfilUser===currentUser);
+  var h2=document.querySelector("#perfil-modal .modal-head h2"); if(h2)h2.textContent=propio?"Mi perfil":("Perfil de "+perfilUser);
+  document.getElementById("perfil-foto-btn").style.display=propio?"inline-block":"none";
+  document.getElementById("perfil-pass-btn").style.display=propio?"inline-block":"none";
+  document.getElementById("perfil-modal").classList.add("open");renderPerfil();
+}
 function closePerfil(){document.getElementById("perfil-modal").classList.remove("open");}
 // Panel destacado tipo Steam: al pulsar un logro sube aquí con nombre y descripción.
 function renderFeatured(i){
@@ -386,49 +447,87 @@ function renderFeatured(i){
   for(var t=0;t<tiles.length;t++)tiles[t].classList.toggle("sel",String(t)===String(i));
 }
 function renderPerfil(){
+  var user=perfilUser||currentUser, propio=(user===currentUser);
   var body=document.getElementById("perfil-body");body.innerHTML="Cargando…";perfilLogros=[];
-  fetch(FB+"/campanas.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():{};}).then(function(camps){
-    camps=camps||{};var misCamps=[],total=0,xpTotal=0;
-    Object.keys(camps).forEach(function(id){
-      var c=camps[id];if(!c||!c.info)return;
-      if(!puedeEntrar(c.info))return;
-      var logros=toArr(c.logros),prog=c.progreso||{};
-      var mios=logros.filter(function(l){var s=slug(l.nombre);return prog[s]&&(l.personaje===currentUser||prog[s].por===currentUser);});
-      var miTotal=logros.filter(function(l){return l.personaje===currentUser;}).length;
-      mios.forEach(function(l){xpTotal+=xpDeRareza(l.dificultad);});
-      total+=mios.length;misCamps.push({nombre:c.info.nombre||id,foto:c.info.foto||null,n:mios.length,total:miTotal,logros:mios});
-    });
-    var nv=nivelDeXP(xpTotal), pctxp=nv.need?Math.round(nv.en/nv.need*100):0;
-    var av=miPerfilFoto?('<img src="'+miPerfilFoto+'" alt="">'):esc((currentUser||"?").charAt(0).toUpperCase());
-    var html='<div class="perfil-head"><div class="avatar">'+av+'</div><div><div class="perfil-nombre">'+esc(currentUser)+'<span class="nivel-badge">Nivel '+nv.lvl+'</span></div><span class="rol-badge rol-'+rolDe(currentUser)+'">'+rolDe(currentUser)+'</span></div></div>';
-    html+='<div class="xp-wrap"><div class="xp-bar"><i style="width:'+pctxp+'%"></i></div><div class="xp-lbl">'+nv.en+' / '+nv.need+' XP para el nivel '+(nv.lvl+1)+' · '+xpTotal+' XP totales</div></div>';
-    html+='<div class="perfil-stats"><div class="stat-box"><div class="stat-num">'+total+'</div><div class="stat-lbl">Logros conseguidos</div></div><div class="stat-box"><div class="stat-num">'+misCamps.length+'</div><div class="stat-lbl">Campañas</div></div></div>';
+  var t=new Date().getTime();
+  Promise.all([
+    fetch(FB+"/campanas.json?x="+t).then(function(r){return r.ok?r.json():{};}).catch(function(){return {};}),
+    fetch(FB+"/perfiles/"+encodeURIComponent(user)+".json?x="+t).then(function(r){return r.ok?r.json():{};}).catch(function(){return {};})
+  ]).then(function(arr){
+    var camps=arr[0]||{}, perf=arr[1]||{};
+    var foto=(typeof perf.foto==="string")?perf.foto:null;
+    var vitrina=Array.isArray(perf.vitrina)?perf.vitrina:[];
+    var recuerdos=perf.recuerdos||{};
+    if(propio){ miPerfilFoto=foto; miVitrina=vitrina; }
+    var cu=computarCuenta(camps,user), nv=cu.nivel, pctxp=nv.need?Math.round(nv.en/nv.need*100):0;
+    var mc=marcoNivel(nv.lvl), avcls=mc?(" mn-"+mc):"";
+    if(propio)miNivelCuenta=nv.lvl;
+    var av=foto?('<img src="'+foto+'" alt="">'):esc((user||"?").charAt(0).toUpperCase());
+    var estr=cu.prestigio?(' <span class="prestigio" title="Prestigio: campañas terminadas">'+new Array(cu.prestigio+1).join("⭐")+'</span>'):'';
+    var html='<div class="perfil-head"><div class="avatar'+avcls+'">'+av+'</div><div><div class="perfil-nombre">'+esc(user)+'<span class="nivel-badge">Nivel '+nv.lvl+'</span></div><span class="rol-badge rol-'+rolDe(user)+'">'+rolDe(user)+'</span>'+estr+'</div></div>';
+    html+='<div class="xp-wrap"><div class="xp-bar"><i style="width:'+pctxp+'%"></i></div><div class="xp-lbl">'+nv.en+' / '+nv.need+' XP para el nivel '+(nv.lvl+1)+' · '+cu.xpTotal+' XP totales</div></div>';
+    html+='<div class="perfil-stats"><div class="stat-box"><div class="stat-num">'+cu.total+'</div><div class="stat-lbl">Logros</div></div><div class="stat-box"><div class="stat-num">'+cu.misCamps.length+'</div><div class="stat-lbl">Campañas</div></div><div class="stat-box"><div class="stat-num">'+cu.prestigio+'</div><div class="stat-lbl">Prestigio</div></div></div>';
+    var pk=Object.keys(cu.premios);
+    if(pk.length){ html+='<div class="premios"><h3 class="perfil-h3">🏅 Premios</h3>'; pk.forEach(function(cat){ html+='<span class="premio-chip">'+esc(cat)+' ×'+cu.premios[cat]+'</span>'; }); html+='</div>'; }
     html+='<div class="perfil-feat" id="perfil-feat"></div>';
-    html+='<h3 style="color:#fff;font-size:16px;margin:16px 0 8px;">Mis campañas</h3>';
-    if(!misCamps.length)html+='<p style="color:var(--muted);font-size:13px;">No estás en ninguna campaña todavía.</p>';
+    html+='<h3 class="perfil-h3">'+(propio?'Mis campañas':'Campañas')+'</h3>';
+    if(!cu.misCamps.length)html+='<p style="color:var(--muted);font-size:13px;">Sin campañas todavía.</p>';
     var gi=0;
-    misCamps.forEach(function(mc){
-      html+='<div class="perfil-camp"><h4>'+(mc.foto?('<img class="camp-foto-mini" src="'+mc.foto+'" alt="">'):'')+esc(mc.nombre)+' <span style="color:var(--muted);font-weight:400;font-size:12.5px;">— '+mc.n+(mc.total?(" / "+mc.total+" de tu lista"):"")+' conseguidos</span></h4>';
-      if(mc.logros.length){
-        mc.logros.sort(function(a,b){var fa=miVitrina.indexOf(slug(a.nombre))>=0?0:1,fb=miVitrina.indexOf(slug(b.nombre))>=0?0:1;return fa-fb;});
+    cu.misCamps.forEach(function(mcp){
+      html+='<div class="perfil-camp"><h4>'+(mcp.foto?('<img class="camp-foto-mini" src="'+mcp.foto+'" alt="">'):'')+esc(mcp.nombre)+(mcp.bloqueada?' 🔒':'')+' <span style="color:var(--muted);font-weight:400;font-size:12.5px;">— '+mcp.logros.length+' conseguidos</span></h4>';
+      if(mcp.logros.length){
+        mcp.logros.sort(function(a,b){var fa=vitrina.indexOf(slug(a.nombre))>=0?0:1,fb=vitrina.indexOf(slug(b.nombre))>=0?0:1;return fa-fb;});
         html+='<div class="logro-grid">';
-        mc.logros.forEach(function(l){
-          var s=slug(l.nombre),fav=miVitrina.indexOf(s)>=0,rcls=l.dificultad?(" r-"+difKey(l.dificultad)):"";
-          perfilLogros.push({l:l,camp:mc.nombre});
-          html+='<div class="logro-tilewrap"><button class="logro-tile'+rcls+(fav?" fav":"")+'" type="button" data-i="'+gi+'" title="'+esc(l.nombre)+'">'+iconHTML(l)+'</button><button class="fav-btn'+(fav?" on":"")+'" type="button" data-fav="'+esc(s)+'" title="Fijar como destacado">'+(fav?"★":"☆")+'</button></div>';
+        mcp.logros.forEach(function(l){
+          var s=slug(l.nombre),fav=vitrina.indexOf(s)>=0,rcls=l.dificultad?(" r-"+difKey(l.dificultad)):"";
+          perfilLogros.push({l:l,camp:mcp.nombre});
+          html+='<div class="logro-tilewrap"><button class="logro-tile'+rcls+(fav?" fav":"")+'" type="button" data-i="'+gi+'" title="'+esc(l.nombre)+'">'+iconHTML(l)+'</button>'+(propio?('<button class="fav-btn'+(fav?" on":"")+'" type="button" data-fav="'+esc(s)+'" title="Fijar como destacado">'+(fav?"★":"☆")+'</button>'):(fav?'<span class="fav-btn on" style="pointer-events:none">★</span>':''))+'</div>';
           gi++;
         });
         html+='</div>';
-      } else html+='<div style="color:var(--muted);font-size:12.5px;">Aún sin logros conseguidos aquí.</div>';
+      } else html+='<div style="color:var(--muted);font-size:12.5px;">Aún sin logros aquí.</div>';
       html+='</div>';
     });
+    html+='<div class="recuerdos"><h3 class="perfil-h3">📓 Recuerdos'+(propio?' <button class="btn dm" id="add-recuerdo" type="button" style="font-size:12px;padding:3px 9px;">➕ Añadir</button>':'')+'</h3>';
+    var rks=Object.keys(recuerdos);
+    if(!rks.length)html+='<p style="color:var(--muted);font-size:12.5px;">Sin recuerdos todavía.</p>';
+    rks.forEach(function(rid){
+      var r=recuerdos[rid]||{}, likes=r.likes?Object.keys(r.likes):[], yo=likes.indexOf(currentUser)>=0;
+      html+='<div class="recuerdo"><div class="recuerdo-tx"><b>'+esc(r.titulo||"")+'</b><div>'+esc(r.desc||"")+'</div></div><button class="like-btn'+(yo?" on":"")+'" data-rid="'+esc(rid)+'" type="button">❤ '+likes.length+'</button>'+(propio?('<button class="rec-del" data-rid="'+esc(rid)+'" type="button" title="Borrar">🗑</button>'):'')+'</div>';
+    });
+    html+='</div>';
     body.innerHTML=html;
     var tiles=body.querySelectorAll(".logro-tile");
-    for(var t=0;t<tiles.length;t++){(function(btn){btn.addEventListener("click",function(){renderFeatured(parseInt(btn.getAttribute("data-i"),10));});})(tiles[t]);}
-    var favs=body.querySelectorAll(".fav-btn");
-    for(var k=0;k<favs.length;k++){(function(btn){btn.addEventListener("click",function(){toggleFav(btn.getAttribute("data-fav"));});})(favs[k]);}
+    for(var ti=0;ti<tiles.length;ti++){(function(btn){btn.addEventListener("click",function(){renderFeatured(parseInt(btn.getAttribute("data-i"),10));});})(tiles[ti]);}
+    if(propio){
+      var favs=body.querySelectorAll(".fav-btn[data-fav]");
+      for(var k=0;k<favs.length;k++){(function(btn){btn.addEventListener("click",function(){toggleFav(btn.getAttribute("data-fav"));});})(favs[k]);}
+      var ar=document.getElementById("add-recuerdo"); if(ar)ar.addEventListener("click",function(){addRecuerdo(user);});
+      var dels=body.querySelectorAll(".rec-del");
+      for(var di=0;di<dels.length;di++){(function(btn){btn.addEventListener("click",function(){borrarRecuerdo(user,btn.getAttribute("data-rid"));});})(dels[di]);}
+    }
+    var lks=body.querySelectorAll(".like-btn");
+    for(var li=0;li<lks.length;li++){(function(btn){btn.addEventListener("click",function(){likeRecuerdo(user,btn.getAttribute("data-rid"));});})(lks[li]);}
     renderFeatured(perfilLogros.length?0:-1);
   }).catch(function(){body.innerHTML="No se pudo cargar el perfil.";});
+}
+function addRecuerdo(user){
+  if(user!==currentUser)return;
+  var titulo=(window.prompt("Título del recuerdo:","")||"").trim(); if(!titulo)return;
+  var desc=(window.prompt("Descripción:","")||"").trim();
+  fetch(FB+"/perfiles/"+encodeURIComponent(user)+"/recuerdos/r"+(new Date().getTime())+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({titulo:titulo,desc:desc})}).then(function(){renderPerfil();}).catch(function(){});
+}
+function borrarRecuerdo(user,rid){
+  if(user!==currentUser||!rid)return; if(!confirm("¿Borrar este recuerdo?"))return;
+  fetch(FB+"/perfiles/"+encodeURIComponent(user)+"/recuerdos/"+encodeURIComponent(rid)+".json",{method:"DELETE"}).then(function(){renderPerfil();}).catch(function(){});
+}
+function likeRecuerdo(owner,rid){
+  if(!rid)return;
+  var url=FB+"/perfiles/"+encodeURIComponent(owner)+"/recuerdos/"+encodeURIComponent(rid)+"/likes/"+encodeURIComponent(currentUser)+".json";
+  fetch(url+"?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(cur){
+    if(cur){ fetch(url,{method:"DELETE"}).then(function(){renderPerfil();}); }
+    else { fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(true)}).then(function(){renderPerfil();}); }
+  }).catch(function(){});
 }
 function toggleFav(s){
   if(!s)return;
@@ -610,7 +709,7 @@ function renderFeed(camps){
     var c=camps[id]; if(!c||!c.info||!puedeEntrar(c.info))return;
     var logs=toArr(c.logros), prog=c.progreso||{}, bySlug={};
     logs.forEach(function(l){bySlug[slug(l.nombre)]=l;});
-    Object.keys(prog).forEach(function(s){ var p=prog[s],l=bySlug[s]; if(l&&p&&p.fecha&&!l.oculto) items.push({l:l,por:p.por,fecha:p.fecha,camp:c.info.nombre||id}); });
+    Object.keys(prog).forEach(function(s){ var p=prog[s],l=bySlug[s]; if(l&&p&&p.fecha&&!l.oculto) items.push({l:l,por:p.por,fecha:p.fecha,camp:c.info.nombre||id,target:(l.categoria==="grupo"?(c.info.gm||p.por):p.por)}); });
   });
   items.sort(function(a,b){return a.fecha<b.fecha?1:(a.fecha>b.fecha?-1:0);});
   items=items.slice(0,3);
@@ -619,9 +718,11 @@ function renderFeed(camps){
   var html='<div class="feed-title">🏆 Últimos logros</div>';
   ord.forEach(function(it,i){
     var depth=ord.length-1-i;
-    html+='<div class="feed-item" style="opacity:'+(1-depth*0.32).toFixed(2)+';transform:scale('+(1-depth*0.07).toFixed(2)+');"><span class="feed-ic">'+iconHTML(it.l)+'</span><span class="feed-tx"><b>'+esc(it.l.nombre)+'</b><span class="feed-sub">'+esc(it.por||"?")+' · '+esc(it.camp)+'</span></span></div>';
+    html+='<div class="feed-item" data-user="'+esc(it.target||"")+'" title="Ver perfil de '+esc(it.target||"")+'" style="opacity:'+(1-depth*0.32).toFixed(2)+';transform:scale('+(1-depth*0.07).toFixed(2)+');"><span class="feed-ic">'+iconHTML(it.l)+'</span><span class="feed-tx"><b>'+esc(it.l.nombre)+'</b><span class="feed-sub">'+esc(it.por||"?")+' · '+esc(it.camp)+'</span></span></div>';
   });
   fe.innerHTML=html;
+  var fis=fe.querySelectorAll(".feed-item");
+  for(var i2=0;i2<fis.length;i2++){(function(el){var u=el.getAttribute("data-user");if(u)el.addEventListener("click",function(){openPerfil(u);});})(fis[i2]);}
 }
 function crearCampana(){
   if(!puedeCrear())return;
@@ -689,6 +790,7 @@ function entrarCampana(id){
     document.getElementById("camp-rol").textContent="Tú: "+currentUser+" ("+rolDe(currentUser)+")";
     updateWhoami();
     show("app");setStatus("");render();startLive();
+    if(pendingLogroSlug){var pl=LOGROS.find(function(x){return slug(x.nombre)===pendingLogroSlug;});pendingLogroSlug=null;if(pl)setTimeout(function(){openLogroDetalle(pl);},250);}
   }).catch(function(){alert("No se pudo cargar la campaña.");});
 }
 
@@ -794,7 +896,12 @@ Guía rápida de esta pantalla. *(Algunos botones solo los ve el GM.)*
 | **Legendario** | naranja | hazañas únicas de la campaña |
 
 ## Tu perfil
-Pulsa tu **avatar** (arriba) para ver tu perfil estilo Steam: foto, logros y campañas. Clica un logro para verlo en grande con su descripción. Tu **Nivel** sube con la XP de tus logros (más XP cuanto más raro). Pulsa la **estrella ★** de un logro para fijarlo como **destacado**. Desde el perfil también cambias tu **foto** (📷) y tu **contraseña** (🔑).
+Pulsa tu **avatar** (arriba) para ver tu perfil estilo Steam: foto, logros y campañas. Clica un logro para verlo en grande con su descripción. Tu **Nivel** sube con la XP de tus logros (más XP cuanto más raro). Pulsa la **estrella ★** de un logro para fijarlo como **destacado**. Desde el perfil también cambias tu **foto** (📷) y tu **contraseña** (🔑). Tu **Nivel de cuenta** sube con TODOS tus logros y campañas, ganas **prestigio ⭐** por cada campaña terminada, y tienes **Recuerdos** (añade los tuyos; los demás pueden darles ❤).
+
+## Más
+- **🏅 Nominaciones**: vota los premios de cada sesión (mejor/peor acción, MVP…); en el perfil se ve cuántas veces te han votado.
+- Pulsa un **logro** para ver su **ficha** (icono, cómo conseguirlo, estado) y copiar su enlace.
+- Pulsa el **nombre** de un jugador (en el Resumen, o en el feed del menú) para ver **su perfil**.
 
 ## Cadenas y logros ocultos
 - Algunos logros están **🔒 encadenados**: no puedes marcarlos hasta conseguir el anterior de la cadena.
@@ -844,7 +951,10 @@ Pulsa tu **avatar** (arriba a la derecha) para ver tu perfil, cambiar la foto co
 
 ## Entrar / Salir
 - **Entrar**: abre la campaña. **🔒 No asignado** = pídele a su GM que te añada.
-- **Salir**: cierra sesión.`;
+- **Salir**: cierra sesión.
+
+## 💾 Copia de seguridad  *(solo Owner)*
+Al final de esta guía: **⬇️ Exportar TODO** descarga toda la base de datos como copia, e **⬆️ Importar / Sobrescribir** la restaura desde un archivo (reemplaza todo). Conviene exportar de vez en cuando.`;
 
 // Guía fija de la app (dentro de la campaña): solo lectura, la ven todos. Abajo, herramientas del GM.
 function openGuia(){
@@ -910,7 +1020,40 @@ function renderGuiaGM(){
   var v=document.getElementById("guiagm-view"),e=document.getElementById("guiagm-edit"),eb=document.getElementById("guiagm-edit-btn"),sb=document.getElementById("guiagm-save-btn");
   var puede=esOwner(); eb.style.display=puede?"inline-block":"none";
   if(guiaGMEditing&&puede){ e.value=guiaGM||""; e.style.display="block"; v.style.display="none"; sb.style.display="inline-block"; eb.textContent="👁 Vista"; }
-  else{ guiaGMEditing=false; v.innerHTML=mdRender(guiaGM||""); v.style.display="block"; e.style.display="none"; sb.style.display="none"; eb.textContent="✏️ Editar"; }
+  else{
+    guiaGMEditing=false;
+    var extra=esOwner()?'<hr style="border:none;border-top:1px solid var(--line);margin:18px 0 12px;"><div class="guia-gmtools"><div style="font-size:13px;color:#fff;margin-bottom:8px;font-weight:600;">💾 Copia de seguridad (solo Owner)</div><button class="btn dm" id="exp-todo" type="button">⬇️ Exportar TODO (JSON)</button> <button class="btn" id="imp-todo" type="button">⬆️ Importar / Sobrescribir</button><div style="font-size:11.5px;color:var(--muted);margin-top:7px;line-height:1.5;">Descarga toda la base de datos como copia de seguridad. <b>Importar</b> SOBRESCRIBE todo con el archivo que elijas.</div></div>':"";
+    v.innerHTML=mdRender(guiaGM||"")+extra; v.style.display="block"; e.style.display="none"; sb.style.display="none"; eb.textContent="✏️ Editar";
+    var et=document.getElementById("exp-todo"); if(et)et.addEventListener("click",exportarTodo);
+    var it=document.getElementById("imp-todo"); if(it)it.addEventListener("click",function(){document.getElementById("backup-input").click();});
+  }
+}
+function exportarTodo(){
+  if(!esOwner())return;
+  setStatus("Exportando…");
+  fetch(FB+"/.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():undefined;}).then(function(data){
+    if(data===undefined){alert("No se pudo exportar.");return;}
+    var blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    var url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download="backup-rolcampaing-"+(new Date().toISOString().slice(0,10))+".json";
+    document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1500);
+    setStatus("✓ Exportado");
+  }).catch(function(){setStatus("⚠ Error");alert("No se pudo exportar.");});
+}
+function importarTodo(file){
+  if(!esOwner()||!file)return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    var data; try{ data=JSON.parse(rd.result); }catch(e){ alert("El archivo no es un JSON válido."); return; }
+    if(!data||typeof data!=="object"){ alert("El archivo no contiene datos válidos."); return; }
+    if(!confirm("⚠ ATENCIÓN: esto SOBRESCRIBE TODA la base de datos (campañas, usuarios, perfiles) con el contenido del archivo. ¿Seguro?"))return;
+    if(!confirm("Última confirmación: se reemplaza TODO. Solo se puede deshacer con otra copia."))return;
+    setStatus("Importando…");
+    fetch(FB+"/.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)})
+      .then(function(r){if(!r.ok)throw 0; alert("✅ Datos restaurados. La página se recargará."); location.reload();})
+      .catch(function(){setStatus("⚠ Error");alert("No se pudo importar.");});
+  };
+  rd.readAsText(file);
 }
 function openGuiaGM(){ document.getElementById("guiagm-modal").classList.add("open"); document.getElementById("guiagm-view").innerHTML="Cargando…"; guiaGMEditing=false; loadGuiaGM(renderGuiaGM); }
 function closeGuiaGM(){ document.getElementById("guiagm-modal").classList.remove("open"); }
@@ -926,7 +1069,7 @@ function openResumen(){
     var html='<table class="resumen-table"><tr><th>Lista</th><th>Conseguidos</th><th>Progreso</th></tr>';
     MIEMBROS.forEach(function(m){
       var arr=LOGROS.filter(function(l){return l.personaje===m;});var n=doneIn(arr),t=arr.length,pct=t?Math.round(n/t*100):0;
-      html+='<tr><td>'+iconPJHTML(m)+' '+esc(m)+'</td><td class="num">'+n+' / '+t+'</td><td><div class="rbar"><i style="width:'+pct+'%"></i></div></td></tr>';
+      html+='<tr><td><span class="perfil-link" data-user="'+esc(m)+'">'+iconPJHTML(m)+' '+esc(m)+'</span></td><td class="num">'+n+' / '+t+'</td><td><div class="rbar"><i style="width:'+pct+'%"></i></div></td></tr>';
     });
     var gr=LOGROS.filter(function(l){return l.categoria==="grupo";});var co=LOGROS.filter(function(l){return l.categoria!=="grupo"&&!isPlayer(l);});
     var gn=doneIn(gr),cn=doneIn(co);
@@ -936,9 +1079,70 @@ function openResumen(){
     var tot=Object.keys(prog).length;
     html+='<p style="margin-top:14px;color:var(--muted);font-size:13px;">Total de logros conseguidos en la campaña: <b style="color:var(--accent)">'+tot+' / '+LOGROS.length+'</b>.</p>';
     body.innerHTML=html;
+    var pls=body.querySelectorAll(".perfil-link");
+    for(var i=0;i<pls.length;i++){(function(el){el.addEventListener("click",function(){closeResumen();openPerfil(el.getAttribute("data-user"));});})(pls[i]);}
   }).catch(function(){body.innerHTML="No se pudo cargar el resumen.";});
 }
 function closeResumen(){document.getElementById("resumen-modal").classList.remove("open");}
+// ====== Nominaciones (premios del grupo por sesión) ======
+function openNominaciones(){document.getElementById("nom-modal").classList.add("open");renderNominaciones();}
+function closeNominaciones(){document.getElementById("nom-modal").classList.remove("open");}
+function renderNominaciones(){
+  var body=document.getElementById("nom-body");body.innerHTML="Cargando…";
+  document.getElementById("nom-nueva").style.display=esGM(campInfo)?"inline-block":"none";
+  fetch(FB+"/campanas/"+currentCamp+"/nominaciones.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():{};}).then(function(noms){
+    noms=noms||{};
+    var sids=Object.keys(noms).sort(function(a,b){return a<b?1:(a>b?-1:0);});
+    if(!sids.length){ body.innerHTML='<p style="color:var(--muted);font-size:13px;">No hay sesiones todavía.'+(esGM(campInfo)?' Pulsa «➕ Nueva sesión» para abrir las votaciones.':'')+'</p>'; return; }
+    var html='<p style="color:var(--muted);font-size:12.5px;margin:0 0 12px;">Vota en cada categoría. Tu voto se puede cambiar. En tu perfil se cuenta cuántas veces te han votado.</p>';
+    sids.forEach(function(sid){
+      var s=noms[sid]||{}, votos=s.votos||{};
+      html+='<div class="nom-ses"><div class="nom-ses-h">'+esc(s.titulo||"Sesión")+' <span style="color:var(--muted);font-weight:400;font-size:12px;">'+(s.fecha?fmtFecha(s.fecha):'')+'</span></div>';
+      NOM_CATS.forEach(function(cat){
+        var v=votos[cat]||{}, tally={}, miVoto=v[currentUser]||"";
+        Object.keys(v).forEach(function(voter){var n=v[voter];if(n)tally[n]=(tally[n]||0)+1;});
+        var leader="",lead=0; Object.keys(tally).forEach(function(n){if(tally[n]>lead){lead=tally[n];leader=n;}});
+        var opts='<option value="">— vota —</option>'+MIEMBROS.map(function(m){return '<option value="'+esc(m)+'"'+(miVoto===m?" selected":"")+'>'+esc(m)+'</option>';}).join('');
+        html+='<div class="nom-cat"><div class="nom-cat-n">'+esc(cat)+'</div><select class="nom-sel" data-sid="'+esc(sid)+'" data-cat="'+esc(cat)+'">'+opts+'</select><div class="nom-lead">'+(leader?('🏆 '+esc(leader)+' ('+lead+')'):'<span style="color:var(--muted)">sin votos</span>')+'</div></div>';
+      });
+      html+='</div>';
+    });
+    body.innerHTML=html;
+    var sels=body.querySelectorAll(".nom-sel");
+    for(var i=0;i<sels.length;i++){(function(sel){sel.addEventListener("change",function(){votarNom(sel.getAttribute("data-sid"),sel.getAttribute("data-cat"),sel.value);});})(sels[i]);}
+  }).catch(function(){body.innerHTML="No se pudo cargar.";});
+}
+function nuevaSesionNom(){
+  if(!esGM(campInfo))return;
+  var titulo=(window.prompt("Nombre de la sesión (p. ej. «Sesión 12»):","Sesión")||"").trim(); if(!titulo)return;
+  fetch(FB+"/campanas/"+currentCamp+"/nominaciones/s"+(new Date().getTime())+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({titulo:titulo,fecha:new Date().toISOString(),votos:{}})}).then(function(){renderNominaciones();}).catch(function(){alert("No se pudo crear la sesión.");});
+}
+function votarNom(sid,cat,nominee){
+  if(!sid||!cat)return;
+  var url=FB+"/campanas/"+currentCamp+"/nominaciones/"+sid+"/votos/"+encodeURIComponent(cat)+"/"+encodeURIComponent(currentUser)+".json";
+  if(nominee){ fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(nominee)}).then(function(){renderNominaciones();}).catch(function(){}); }
+  else { fetch(url,{method:"DELETE"}).then(function(){renderNominaciones();}).catch(function(){}); }
+}
+// ====== Card/detalle de un logro (al pulsarlo se abre en grande) ======
+function openLogroDetalle(l){
+  if(!l)return;
+  var on=isDone(l), id=slug(l.nombre), p=progreso[id]||{}, rcls=l.dificultad?(" r-"+difKey(l.dificultad)):"";
+  var html='<div class="ld-top"><div class="ic ld-ic'+rcls+(on?"":" off")+'">'+iconHTML(l)+'</div><div class="ld-info"><div class="ld-nombre">'+esc(l.nombre)+difBadge(l)+'</div><div class="ld-estado '+(on?"on":"off")+'">'+(on?('✓ Conseguido'+(p.fecha?(' el '+fmtFecha(p.fecha)):'')+(p.por?(' · por '+esc(p.por)):'')):'⏳ Pendiente')+'</div></div></div>';
+  html+='<div class="ld-sec"><div class="ld-lbl">Cómo conseguirlo</div><div class="ld-desc">'+esc(l.descripcion||"—")+'</div></div>';
+  if(l.recompensa)html+='<div class="ld-sec"><div class="ld-lbl">🎁 Recompensa</div><div class="ld-desc">'+esc(l.recompensa)+'</div></div>';
+  if(l.requiere)html+='<div class="ld-sec"><div class="ld-lbl">🔗 Requiere antes</div><div class="ld-desc">'+esc(reqNombre(l))+'</div></div>';
+  html+='<div class="ld-sec"><button class="btn" id="ld-copiar" type="button">🔗 Copiar enlace</button></div>';
+  document.getElementById("logro-body").innerHTML=html;
+  document.getElementById("logro-modal-title").textContent=on?"Logro conseguido":"Logro";
+  var cp=document.getElementById("ld-copiar"); if(cp)cp.addEventListener("click",function(){copiarEnlaceLogro(l);});
+  document.getElementById("logro-modal").classList.add("open");
+}
+function copiarEnlaceLogro(l){
+  var url=location.origin+location.pathname+"#c="+encodeURIComponent(currentCamp)+"&l="+encodeURIComponent(slug(l.nombre));
+  try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){setStatus("✓ Enlace copiado");},function(){window.prompt("Copia el enlace:",url);}); return; } }catch(e){}
+  window.prompt("Copia el enlace:",url);
+}
+function closeLogroDetalle(){document.getElementById("logro-modal").classList.remove("open");}
 
 function renderTabs(){
   var sg=stats(LOGROS.filter(function(l){return l.categoria==="grupo";}));
@@ -1002,6 +1206,7 @@ function buildCard(l){
   div.innerHTML=html;
   if(puede){var cb=div.querySelector(".toggle input");if(cb)cb.addEventListener("change",function(){toggle(l);});}
   if(!editMode&&gm&&oculto){var rv=div.querySelector(".reveal-btn");if(rv)rv.addEventListener("click",function(){revelarLogro(l);});}
+  if(!editMode){ var oc=function(){openLogroDetalle(l);}; var ici=div.querySelector(".ic"); var inf=div.querySelector(".info"); if(ici){ici.style.cursor="pointer";ici.addEventListener("click",oc);} if(inf){inf.style.cursor="pointer";inf.addEventListener("click",oc);} }
   if(editMode){
     var chb=div.querySelector(".chainbtn");if(chb)chb.addEventListener("click",function(){clickCadena(l);});
     var ocb=div.querySelector(".ocbtn");if(ocb)ocb.addEventListener("click",function(){l.oculto=!l.oculto;render();saveLogros();});
@@ -1084,6 +1289,10 @@ fsel.addEventListener("change",function(e){state.filtro=e.target.value;prefs.fil
 document.getElementById("t-edit").addEventListener("change",function(e){editMode=e.target.checked;render();});
 document.getElementById("resumenbtn").addEventListener("click",openResumen);
 document.getElementById("lockbtn").addEventListener("click",toggleBloqueo);
+document.getElementById("nombtn").addEventListener("click",openNominaciones);
+document.getElementById("nom-nueva").addEventListener("click",nuevaSesionNom);
+document.getElementById("nom-close").addEventListener("click",closeNominaciones);
+document.getElementById("nom-modal").addEventListener("click",function(e){if(e.target.id==="nom-modal")closeNominaciones();});
 document.getElementById("volver").addEventListener("click",function(){editMode=false;var te=document.getElementById("t-edit");if(te)te.checked=false;showCampaigns();});
 document.getElementById("crear-camp").addEventListener("click",crearCampana);
 document.getElementById("miembros-save").addEventListener("click",guardarMiembros);
@@ -1112,21 +1321,28 @@ function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reloa
   document.getElementById("resumen-modal").addEventListener("click",function(e){if(e.target.id==="resumen-modal")closeResumen();});
   document.getElementById("cadenas-close").addEventListener("click",closeCadenas);
   document.getElementById("cadenas-modal").addEventListener("click",function(e){if(e.target.id==="cadenas-modal")closeCadenas();});
-  document.getElementById("camp-whoami").addEventListener("click",openPerfil);
-  document.getElementById("whoami").addEventListener("click",openPerfil);
+  document.getElementById("camp-whoami").addEventListener("click",function(){openPerfil();});
+  document.getElementById("whoami").addEventListener("click",function(){openPerfil();});
   document.getElementById("perfil-close").addEventListener("click",closePerfil);
   document.getElementById("perfil-modal").addEventListener("click",function(e){if(e.target.id==="perfil-modal")closePerfil();});
   document.getElementById("perfil-foto-btn").addEventListener("click",function(){fotoCampId=null;document.getElementById("foto-input").click();});
   document.getElementById("perfil-pass-btn").addEventListener("click",cambiarPass);
   document.getElementById("foto-input").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];if(f){if(fotoCampId){cambiarFotoCampana(f,fotoCampId);fotoCampId=null;}else cambiarFoto(f);}e.target.value="";});
   document.getElementById("icono-input").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];if(f){if(pendingPjIcon){cambiarIconoPJ(f,pendingPjIcon);pendingPjIcon=null;}else cambiarIconoLogro(f);}e.target.value="";});
+  document.getElementById("backup-input").addEventListener("change",function(e){if(e.target.files&&e.target.files[0])importarTodo(e.target.files[0]);e.target.value="";});
   document.getElementById("cuentas-btn").addEventListener("click",openCuentas);
   document.getElementById("cuentas-close").addEventListener("click",closeCuentas);
   document.getElementById("cuentas-modal").addEventListener("click",function(e){if(e.target.id==="cuentas-modal")closeCuentas();});
   document.getElementById("miembros-foto").addEventListener("click",function(){fotoCampId=miembrosCampId;document.getElementById("foto-input").click();});
+  document.getElementById("logro-close").addEventListener("click",closeLogroDetalle);
+  document.getElementById("logro-modal").addEventListener("click",function(e){if(e.target.id==="logro-modal")closeLogroDetalle();});
   loadUsers(function(){
     var sess="";try{sess=localStorage.getItem(SESSION)||"";}catch(e){}
-    if(sess&&Object.prototype.hasOwnProperty.call(USERS,sess))startSession(sess); else show("login");
+    if(sess&&Object.prototype.hasOwnProperty.call(USERS,sess)){
+      startSession(sess);
+      var h=location.hash||"", mc=h.match(/[#&]c=([^&]+)/), ml=h.match(/[#&]l=([^&]+)/);
+      if(mc&&ml){ pendingLogroSlug=decodeURIComponent(ml[1]); var cid=decodeURIComponent(mc[1]); setTimeout(function(){entrarCampana(cid);},400); }
+    } else show("login");
   });
 })();
 </script>
