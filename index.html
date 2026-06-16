@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>RolCampaingAwardSystem</title>
-<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
 
@@ -391,12 +394,12 @@ function logEvento(accion,detalle,campId){
   var cid=campId||currentCamp; if(!cid)return;
   try{ fetch(FB+"/campanas/"+cid+"/log.json",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({t:new Date().toISOString(),u:currentUser,a:accion,d:detalle||""})}); }catch(e){}
 }
-var DIFS=[["","— Dificultad —"],["Común","Común"],["Raro","Raro"],["Épico","Épico"],["Legendario","Legendario"]];
-function difKey(d){var n=norm(d);if(!n)return "";if(n.indexOf("legend")>=0)return "legendario";if(n.indexOf("epic")>=0)return "epico";if(n.indexOf("raro")>=0)return "raro";return "comun";}
+var DIFS=[["","— Dificultad —"],["Común","Común"],["Raro","Raro"],["Épico","Épico"],["Legendario","Legendario"],["Mítica","Mítica"]];
+function difKey(d){var n=norm(d);if(!n)return "";if(n.indexOf("mit")>=0)return "mitica";if(n.indexOf("legend")>=0)return "legendario";if(n.indexOf("epic")>=0)return "epico";if(n.indexOf("raro")>=0)return "raro";return "comun";}
 function difBadge(l){return l.dificultad?' <span class="dif d-'+difKey(l.dificultad)+'">'+esc(l.dificultad)+'</span>':"";}
 function difSelect(l){var s='<select class="dif-input">';for(var i=0;i<DIFS.length;i++){s+='<option value="'+esc(DIFS[i][0])+'"'+(((l.dificultad||"")===DIFS[i][0])?" selected":"")+'>'+esc(DIFS[i][1])+'</option>';}return s+'</select>';}
 // XP por rareza y curva de nivel (lvl1=50, +10 cada nivel).
-function xpDeRareza(d){var k=difKey(d);return k==="legendario"?150:(k==="epico"?60:(k==="raro"?25:10));}
+function xpDeRareza(d){var k=difKey(d);return k==="mitica"?500:(k==="legendario"?150:(k==="epico"?60:(k==="raro"?25:10)));}
 function nivelDeXP(xp){var lvl=1,need=50,acc=0;while(xp>=acc+need){acc+=need;lvl++;need+=10;}return {lvl:lvl,en:xp-acc,need:need,total:xp};}
 // Marco del avatar según nivel: 1-5 sin marco, 6-15 común, 16-25 raro, 26-35 épico, 36+ legendario (colores de rareza).
 function marcoNivel(lvl){ if(lvl<=5)return ""; return ["comun","raro","epico","legendario"][Math.min(Math.floor((lvl-6)/10),3)]; }
@@ -424,13 +427,13 @@ function computarCuenta(camps,user){
       if(esMio){ tiles.push(l); xpCamp+=xpDeRareza(l.dificultad); }
     });
     if(!esMiembro) return;
-    if(info.bloqueada){ prestigio++; xpCamp+=500; }
+    if(info.bloqueada){ prestigio++; xpCamp+=1000; }
     total+=tiles.length; xpTotal+=xpCamp;
     misCamps.push({id:id,nombre:info.nombre||id,foto:info.foto||null,gm:info.gm,bloqueada:!!info.bloqueada,logros:tiles});
   });
   // Logro especial hardcodeado solo para el Owner (no está en la BD).
   var especiales=[];
-  if(rolDe(user)==="owner"){ especiales.push({nombre:"Creador del todo",descripcion:"Forjó este sistema de logros entero, desde la primera línea. El que lo hizo todo. 👑",dificultad:"Legendario",icono:"👑",categoria:"especial"}); total+=especiales.length; xpTotal+=500; }
+  if(rolDe(user)==="owner"){ var esp={nombre:"Creador del todo",descripcion:"Logro obtenido por forjar este sistema de logros.",dificultad:"Mítica",icono:"👑",categoria:"especial"}; especiales.push(esp); total+=1; xpTotal+=xpDeRareza(esp.dificultad); }
   return {misCamps:misCamps,total:total,xpTotal:xpTotal,nivel:nivelDeXP(xpTotal),prestigio:prestigio,premios:premios,especiales:especiales};
 }
 
@@ -512,7 +515,7 @@ function renderFeatured(i){
   var f=document.getElementById("perfil-feat"); if(!f)return;
   var it=perfilLogros[i];
   if(!it){ f.innerHTML='<div class="fic">🏆</div><div><div class="fn">Tus logros</div><div class="fd">Pulsa un logro para ver su nombre y descripción.</div></div>'; return; }
-  f.innerHTML='<div class="fic">'+iconHTML(it.l)+'</div><div><div class="fn">'+esc(it.l.nombre)+'</div><div class="fd">'+esc(it.l.descripcion||"")+'</div><div class="fc">'+esc(it.camp)+(it.l.recompensa?(' · 🎁 '+esc(it.l.recompensa)):"")+'</div></div>';
+  f.innerHTML='<div class="fic'+(it.l.dificultad?(" r-"+difKey(it.l.dificultad)):"")+'">'+iconHTML(it.l)+'</div><div><div class="fn">'+esc(it.l.nombre)+difBadge(it.l)+'</div><div class="fd">'+esc(it.l.descripcion||"")+'</div><div class="fc">'+esc(it.camp)+(it.l.recompensa?(' · 🎁 '+esc(it.l.recompensa)):"")+'</div></div>';
   var tiles=document.querySelectorAll("#perfil-body .logro-tile");
   for(var t=0;t<tiles.length;t++)tiles[t].classList.toggle("sel",String(t)===String(i));
 }
