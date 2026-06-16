@@ -262,7 +262,8 @@
   .perfil-feat .fn{font-size:16px;font-weight:600;color:#fff;}
   .perfil-feat .fd{font-size:13px;color:var(--text);margin-top:3px;}
   .perfil-feat .fc{font-size:11.5px;color:var(--muted);margin-top:4px;}
-  .miembro-row{display:grid;grid-template-columns:1fr 64px 64px;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);}
+  .miembro-row{display:grid;grid-template-columns:1fr 56px 56px 56px;align-items:center;gap:6px;padding:7px 4px;border-bottom:1px solid var(--line);}
+  .gmbadge{position:absolute;right:-6px;bottom:-6px;background:#3a2c10;color:#f0c33c;border:1px solid #6b5114;border-radius:8px;font-size:9px;font-weight:700;padding:1px 4px;line-height:1.25;}
   .miembro-row .mh{font-size:11px;color:var(--muted);text-align:center;}
   .miembro-row .mu{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--text);}
   .miembro-row span:nth-child(2),.miembro-row span:nth-child(3){text-align:center;}
