@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RolCampaingAwardSystem</title>
-<link rel="stylesheet" href="styles.css?v=6">
+<link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
 
@@ -48,11 +48,16 @@
         <div class="sub" id="camp-rol"></div>
       </div>
     </div>
-    <div class="globalbox">
-      <div class="gline"><b id="g-count">0/0</b> logros conseguidos</div>
-      <div class="bar"><div class="fill" id="g-fill"></div></div>
-      <div class="perfect" id="g-perfect"></div>
+    <div class="camp-user">
+      <span class="who" id="whoami" title="Ver mi perfil"></span>
+      <button class="btn" id="logout">Salir</button>
     </div>
+  </div>
+
+  <div class="globalbox">
+    <div class="gline"><b id="g-count">0/0</b> logros conseguidos</div>
+    <div class="bar"><div class="fill" id="g-fill"></div></div>
+    <div class="perfect" id="g-perfect"></div>
   </div>
 
   <div class="controls">
@@ -67,8 +72,6 @@
     <button class="btn dm" id="resumenbtn" style="display:none;">📊 Resumen</button>
     <button class="btn dm" id="lockbtn" style="display:none;">🔒 Bloquear</button>
     <span id="savestatus" style="font-size:12px;color:#9fd3a0;min-width:74px;"></span>
-    <span class="who" id="whoami" title="Ver mi perfil"></span>
-    <button class="btn" id="logout">Salir</button>
   </div>
 
   <div class="lockbar" id="lockbar" style="display:none;">🔒 <b>Campaña bloqueada</b> — solo lectura. Nadie marca ni edita; solo el GM creador y el Owner pueden entrar.</div>
