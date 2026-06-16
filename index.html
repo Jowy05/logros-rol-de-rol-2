@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Logros — Rol de Rol</title>
-<link rel="stylesheet" href="styles.css?v=3">
+<title>RolCampaingAwardSystem</title>
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 
 <div id="login" class="login">
   <div class="login-card">
     <div class="login-logo">🏆</div>
-    <h2>Logros de Rol</h2>
+    <h2>RolCampaingAwardSystem</h2>
     <p class="login-sub">Inicia sesión</p>
     <input id="li-user" list="userlist" placeholder="Nombre (p. ej. Joel)" autocomplete="off">
     <datalist id="userlist"></datalist>
@@ -30,6 +30,7 @@
     </div>
     <button class="btn dm" id="crear-camp" style="display:none;">➕ Crear campaña</button>
     <button class="btn dm" id="crear-usuario" style="display:none;">➕ Crear usuario</button>
+    <button class="btn dm" id="cuentas-btn" style="display:none;">🗂️ Cuentas</button>
     <span class="who" id="camp-whoami" title="Ver mi perfil"></span>
     <button class="btn" id="camp-logout">Salir</button>
   </div>
@@ -104,6 +105,7 @@
   <div class="modal-card">
     <div class="modal-head">
       <h2 id="miembros-title">Miembros</h2>
+      <button class="btn dm" id="miembros-foto" type="button">📷 Foto</button>
       <button class="btn dm" id="miembros-nuevo" type="button">➕ Nuevo usuario</button>
       <button class="btn dm" id="miembros-save" type="button">💾 Guardar</button>
       <button class="btn" id="miembros-close" type="button">✕ Cerrar</button>
@@ -145,6 +147,16 @@
       <button class="btn" id="cadenas-close" type="button">✕ Cerrar</button>
     </div>
     <div class="modal-body" id="cadenas-body"></div>
+  </div>
+</div>
+
+<div class="modal" id="cuentas-modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>🗂️ Cuentas</h2>
+      <button class="btn" id="cuentas-close" type="button">✕ Cerrar</button>
+    </div>
+    <div class="modal-body" id="cuentas-body"></div>
   </div>
 </div>
 
@@ -196,9 +208,54 @@ function crearUsuario(after){
     .catch(function(){setStatus("⚠ Error");alert("No se pudo crear el usuario.");});
 }
 
+// ====== PANEL DE CUENTAS (solo Owner): ver y modificar todas las cuentas ======
+function openCuentas(){ if(!esOwner())return; document.getElementById("cuentas-modal").classList.add("open"); renderCuentas(); }
+function closeCuentas(){ document.getElementById("cuentas-modal").classList.remove("open"); }
+function renderCuentas(){
+  var body=document.getElementById("cuentas-body"); body.innerHTML="Cargando…";
+  loadUsers(function(){
+    var html='<p style="color:var(--muted);font-size:12.5px;margin:0 0 12px;">Todas las cuentas. Cambia el <b>rol</b>, restablece la <b>contraseña</b> (🔑) o <b>borra</b> (🗑) una cuenta.</p><div class="cuentas-list">';
+    Object.keys(USERS).sort(function(a,b){return a.localeCompare(b);}).forEach(function(u){
+      var r=rolDe(u), yo=(u===currentUser);
+      html+='<div class="cuenta-row"><span class="cuenta-nombre">'+esc(u)+(yo?' <span class="rol-badge">tú</span>':'')+'</span>'+
+        '<select class="cuenta-rol" data-u="'+esc(u)+'"'+(yo?' disabled title="No puedes cambiar tu propio rol"':'')+'>'+
+          ['jugador','gm','owner'].map(function(rr){return '<option value="'+rr+'"'+(r===rr?' selected':'')+'>'+rr+'</option>';}).join('')+
+        '</select>'+
+        '<button class="btn cuenta-pass" data-u="'+esc(u)+'" type="button" title="Restablecer contraseña">🔑</button>'+
+        '<button class="btn cuenta-del" data-u="'+esc(u)+'" type="button"'+(yo?' disabled':'')+' title="Borrar cuenta">🗑</button></div>';
+    });
+    html+='</div>';
+    body.innerHTML=html;
+    var rols=body.querySelectorAll(".cuenta-rol");for(var i=0;i<rols.length;i++){(function(s){s.addEventListener("change",function(){cambiarRolCuenta(s.getAttribute("data-u"),s.value);});})(rols[i]);}
+    var ps=body.querySelectorAll(".cuenta-pass");for(var j=0;j<ps.length;j++){(function(b){b.addEventListener("click",function(){resetPassCuenta(b.getAttribute("data-u"));});})(ps[j]);}
+    var ds=body.querySelectorAll(".cuenta-del");for(var k=0;k<ds.length;k++){(function(b){b.addEventListener("click",function(){borrarCuenta(b.getAttribute("data-u"));});})(ds[k]);}
+  });
+}
+function cambiarRolCuenta(u,rol){
+  if(!esOwner()||u===currentUser)return;
+  setStatus("Guardando…");
+  fetch(FB+"/usuarios/"+encodeURIComponent(u)+"/rol.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(rol)})
+    .then(function(r){if(r.ok)ROL[u]=rol;setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Error");});
+}
+function resetPassCuenta(u){
+  if(!esOwner())return;
+  var p=(window.prompt("Nueva contraseña para «"+u+"»:","")||"").trim();
+  if(!p)return;
+  setStatus("Guardando…");
+  fetch(FB+"/usuarios/"+encodeURIComponent(u)+"/pass.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(sha256hex(p))})
+    .then(function(r){if(r.ok)USERS[u]=sha256hex(p);setStatus(r.ok?"✓ Guardado":"⚠ Error");alert(r.ok?"✅ Contraseña de «"+u+"» cambiada.":"⚠ No se pudo.");}).catch(function(){setStatus("⚠ Error");});
+}
+function borrarCuenta(u){
+  if(!esOwner()||u===currentUser)return;
+  if(!confirm('¿Borrar la cuenta «'+u+'»?\nNo se quita de las campañas donde ya esté, pero no podrá iniciar sesión.'))return;
+  setStatus("Borrando…");
+  fetch(FB+"/usuarios/"+encodeURIComponent(u)+".json",{method:"DELETE"})
+    .then(function(r){setStatus(r.ok?"✓ Borrado":"⚠ Error");renderCuentas();}).catch(function(){setStatus("⚠ Error");});
+}
+
 let currentUser="", currentCamp=null, campInfo=null, MIEMBROS=[], GMname="";
 let LOGROS=[], progreso={}, guiaMD=null, editMode=false;
-var guiaEditing=false, dragSrc=null, saveTimers={}, chainSource=null, miVitrina=[];
+var guiaEditing=false, dragSrc=null, saveTimers={}, chainSource=null, miVitrina=[], pendingPjIcon=null, fotoCampId=null;
 const PREFS="rdr2_prefs_v3", SESSION="rdr2_session";
 let prefs={filtro:"todos"};
 try{prefs=Object.assign(prefs,JSON.parse(localStorage.getItem(PREFS))||{});}catch(e){}
@@ -238,6 +295,9 @@ function getIcon(l){
 // Devuelve el HTML del icono: <img> si es una imagen (dataURL), o el emoji si no.
 function esImg(v){return typeof v==="string"&&v.indexOf("data:")===0;}
 function iconHTML(l){ var v=getIcon(l); return esImg(v)?('<img class="ic-img" src="'+v+'" alt="">'):v; }
+// Icono de un personaje/jugador en ESTA campaña: personalizado (campInfo.pjicon) > por defecto > 👤
+function iconPJ(m){ return (campInfo&&campInfo.pjicon&&campInfo.pjicon[m]) || PLAYER_ICON[m] || "👤"; }
+function iconPJHTML(m){ var v=iconPJ(m); return esImg(v)?('<img class="ic-mini" src="'+v+'" alt="">'):v; }
 function fmtFecha(iso){ try{var d=new Date(iso);return ("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2)+"/"+d.getFullYear();}catch(e){return "";} }
 var DIFS=[["","— Dificultad —"],["Común","Común"],["Raro","Raro"],["Épico","Épico"],["Legendario","Legendario"]];
 function difKey(d){var n=norm(d);if(!n)return "";if(n.indexOf("legend")>=0)return "legendario";if(n.indexOf("epic")>=0)return "epico";if(n.indexOf("raro")>=0)return "raro";return "comun";}
@@ -327,7 +387,7 @@ function renderPerfil(){
       var mios=logros.filter(function(l){var s=slug(l.nombre);return prog[s]&&(l.personaje===currentUser||prog[s].por===currentUser);});
       var miTotal=logros.filter(function(l){return l.personaje===currentUser;}).length;
       mios.forEach(function(l){xpTotal+=xpDeRareza(l.dificultad);});
-      total+=mios.length;misCamps.push({nombre:c.info.nombre||id,n:mios.length,total:miTotal,logros:mios});
+      total+=mios.length;misCamps.push({nombre:c.info.nombre||id,foto:c.info.foto||null,n:mios.length,total:miTotal,logros:mios});
     });
     var nv=nivelDeXP(xpTotal), pctxp=nv.need?Math.round(nv.en/nv.need*100):0;
     var av=miPerfilFoto?('<img src="'+miPerfilFoto+'" alt="">'):esc((currentUser||"?").charAt(0).toUpperCase());
@@ -339,7 +399,7 @@ function renderPerfil(){
     if(!misCamps.length)html+='<p style="color:var(--muted);font-size:13px;">No estás en ninguna campaña todavía.</p>';
     var gi=0;
     misCamps.forEach(function(mc){
-      html+='<div class="perfil-camp"><h4>'+esc(mc.nombre)+' <span style="color:var(--muted);font-weight:400;font-size:12.5px;">— '+mc.n+(mc.total?(" / "+mc.total+" de tu lista"):"")+' conseguidos</span></h4>';
+      html+='<div class="perfil-camp"><h4>'+(mc.foto?('<img class="camp-foto-mini" src="'+mc.foto+'" alt="">'):'')+esc(mc.nombre)+' <span style="color:var(--muted);font-weight:400;font-size:12.5px;">— '+mc.n+(mc.total?(" / "+mc.total+" de tu lista"):"")+' conseguidos</span></h4>';
       if(mc.logros.length){
         mc.logros.sort(function(a,b){var fa=miVitrina.indexOf(slug(a.nombre))>=0?0:1,fb=miVitrina.indexOf(slug(b.nombre))>=0?0:1;return fa-fb;});
         html+='<div class="logro-grid">';
@@ -413,6 +473,58 @@ function iconPicker(sel,cls,allowImg){
   }
   return s+'</div>';
 }
+// Icono del personaje en la campaña (campInfo.pjicon[player]): emoji o imagen.
+function buildPjIconBox(){
+  var m=state.sub;
+  var d=document.createElement("div");d.className="addbox pjbox";
+  var cur=(campInfo&&campInfo.pjicon&&campInfo.pjicon[m])||"";
+  d.innerHTML='<span style="font-size:13px;color:var(--muted);width:100%;">Icono de <b style="color:#fff;">'+esc(m)+'</b> (se ve en su pestaña y en el resumen):</span><div style="width:100%">'+iconPicker(cur,"pj-ic",true)+'</div>';
+  var picks=d.querySelectorAll(".pj-ic .icbtn");
+  for(var i=0;i<picks.length;i++){(function(btn){btn.addEventListener("click",function(){
+    if(btn.getAttribute("data-img")){ pendingPjIcon=m; document.getElementById("icono-input").click(); return; }
+    setPjIcon(m,btn.getAttribute("data-ic"));
+  });})(picks[i]);}
+  return d;
+}
+function setPjIcon(m,v){
+  if(!campInfo.pjicon)campInfo.pjicon={};
+  if(v)campInfo.pjicon[m]=v; else delete campInfo.pjicon[m];
+  render(); savePjIcon();
+}
+function savePjIcon(){
+  setStatus("Guardando…");
+  fetch(FB+"/campanas/"+currentCamp+"/info/pjicon.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(campInfo.pjicon||{})}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});
+}
+function cambiarIconoPJ(file,m){
+  if(!file)return;
+  var rd=new FileReader();
+  rd.onload=function(){var img=new Image();img.onload=function(){
+    var sz=96,cv=document.createElement("canvas");cv.width=sz;cv.height=sz;var ctx=cv.getContext("2d");
+    var s=Math.min(img.width,img.height),sx=(img.width-s)/2,sy=(img.height-s)/2;
+    ctx.drawImage(img,sx,sy,s,s,0,0,sz,sz);
+    var data=cv.toDataURL("image/jpeg",0.72);
+    if(data.length>120000){alert("Imagen muy grande, prueba con otra.");return;}
+    setPjIcon(m,data);
+  };img.src=rd.result;};
+  rd.readAsDataURL(file);
+}
+// Foto de una campaña (info.foto): se ve en la tarjeta del menú y en el perfil.
+function cambiarFotoCampana(file,id){
+  if(!file||!id)return;
+  var rd=new FileReader();
+  rd.onload=function(){var img=new Image();img.onload=function(){
+    var sz=96,cv=document.createElement("canvas");cv.width=sz;cv.height=sz;var ctx=cv.getContext("2d");
+    var s=Math.min(img.width,img.height),sx=(img.width-s)/2,sy=(img.height-s)/2;
+    ctx.drawImage(img,sx,sy,s,s,0,0,sz,sz);
+    var data=cv.toDataURL("image/jpeg",0.72);
+    if(data.length>120000){alert("Imagen muy grande, prueba con otra.");return;}
+    setStatus("Guardando…");
+    fetch(FB+"/campanas/"+id+"/info/foto.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)})
+      .then(function(r){if(!r.ok)throw 0; if(miembrosCampInfo)miembrosCampInfo.foto=data; if(campInfo&&currentCamp===id)campInfo.foto=data; setStatus("✓ Guardado"); alert("✅ Foto de campaña guardada."); loadCampaigns();})
+      .catch(function(){setStatus("⚠ Error");alert("No se pudo guardar la foto.");});
+  };img.src=rd.result;};
+  rd.readAsDataURL(file);
+}
 // Subir una imagen del PC como icono de un logro (reducida a 96x96).
 function cambiarIconoLogro(file){
   if(!file||!iconoTarget)return;
@@ -443,6 +555,7 @@ function startSession(user){
   currentUser=user;miPerfilFoto=null;
   document.getElementById("crear-camp").style.display=puedeCrear()?"inline-block":"none";
   document.getElementById("crear-usuario").style.display=puedeCrear()?"inline-block":"none";
+  document.getElementById("cuentas-btn").style.display=esOwner()?"inline-block":"none";
   updateWhoami();
   loadMiPerfil(updateWhoami);
   showCampaigns();
@@ -468,7 +581,8 @@ function renderCampaigns(camps){
     var d=document.createElement("div");d.className="camp-card"+(entra?"":" locked");
     var gms=info.gms?Object.keys(info.gms):[];
     var gmTxt=esc(info.gm||"—")+(gms.length?(" +"+gms.length+" GM"):"");
-    var html='<div class="camp-ic">📜</div><div class="camp-info"><div class="camp-nombre">'+esc(info.nombre||id)+'</div><div class="camp-meta">GM: '+gmTxt+' · '+ms.length+' jugador(es)</div></div><div class="camp-actions"></div>';
+    var camIc=info.foto?('<img src="'+info.foto+'" alt="">'):'📜';
+    var html='<div class="camp-ic">'+camIc+'</div><div class="camp-info"><div class="camp-nombre">'+esc(info.nombre||id)+'</div><div class="camp-meta">GM: '+gmTxt+' · '+ms.length+' jugador(es)</div></div><div class="camp-actions"></div>';
     d.innerHTML=html;
     var act=d.querySelector(".camp-actions");
     if(entra){var b=document.createElement("button");b.className="btn";b.textContent="Entrar";b.onclick=function(){entrarCampana(id);};act.appendChild(b);}
@@ -680,6 +794,7 @@ Pulsa tu **avatar** (arriba) para ver tu perfil estilo Steam: foto, logros y cam
 ## Solo el GM
 - **✏️ Modo edición**: añade, edita, borra y reordena logros (arrastrando o con ▲▼). En cada logro puedes cambiar **nombre, descripción, 🎁 recompensa, rareza** y el **icono** (un emoji o **📷 una imagen** tuya).
 - **🔗 Cadena**: pulsa 🔗 en un logro y luego 🔗 en otro para encadenarlos (el 2º se desbloquea al conseguir el 1º). **👁/🙈**: oculta un logro a los jugadores; revélalo cuando quieras.
+- **Icono de personaje**: en la pestaña de un jugador (modo edición) puedes ponerle un emoji o **una imagen** como icono (se ve en su pestaña y en el Resumen).
 - **➕ Añadir**: crea un logro en la pestaña en la que estés.
 - **📊 Resumen**: cuántos logros lleva cada jugador y el total.
 - Al final de esta guía: **⬇️ Exportar** la campaña a JSON y **🔗 Ver cadenas** (para deshacerlas).`;
@@ -704,10 +819,14 @@ Pon nombre y contraseña. El nuevo usuario aparece en el **login** y en la lista
 Dos casillas por persona:
 - **Miembro**: entra y tiene **su lista** (marca solo lo suyo).
 - **GM**: **manda** en esa campaña (marca cualquier logro, edita, asigna y ve el Resumen).
+- **📷 Foto**: dale una foto a la campaña (se ve en el menú y junto a su nombre en los perfiles).
 
 El **creador** sale como GM fijo. Marca **GM** a quien quieras que te ayude a dirigir.
 
 > Un GM **no** entra en campañas ajenas salvo que su GM lo añada: así cada campaña queda separada.
+
+## 🗂️ Cuentas  *(solo el Owner)*
+Botón **🗂️ Cuentas**: ves **todas** las cuentas y puedes cambiar su **rol**, restablecer su **contraseña** (🔑) o **borrarlas** (🗑).
 
 ## Tu perfil
 Pulsa tu **avatar** (arriba a la derecha) para ver tu perfil y cambiar la foto con **📷 Cambiar foto**.
@@ -796,7 +915,7 @@ function openResumen(){
     var html='<table class="resumen-table"><tr><th>Lista</th><th>Conseguidos</th><th>Progreso</th></tr>';
     MIEMBROS.forEach(function(m){
       var arr=LOGROS.filter(function(l){return l.personaje===m;});var n=doneIn(arr),t=arr.length,pct=t?Math.round(n/t*100):0;
-      html+='<tr><td>'+(PLAYER_ICON[m]||"👤")+' '+esc(m)+'</td><td class="num">'+n+' / '+t+'</td><td><div class="rbar"><i style="width:'+pct+'%"></i></div></td></tr>';
+      html+='<tr><td>'+iconPJHTML(m)+' '+esc(m)+'</td><td class="num">'+n+' / '+t+'</td><td><div class="rbar"><i style="width:'+pct+'%"></i></div></td></tr>';
     });
     var gr=LOGROS.filter(function(l){return l.categoria==="grupo";});var co=LOGROS.filter(function(l){return l.categoria!=="grupo"&&!isPlayer(l);});
     var gn=doneIn(gr),cn=doneIn(co);
@@ -824,7 +943,7 @@ function renderTabs(){
   sw.innerHTML='<div class="subtabs" id="st"></div>';
   var st=document.getElementById("st");
   var groups=[{key:"todos",icon:"🌐",label:"Para todos",arr:LOGROS.filter(function(l){return l.categoria!=="grupo"&&!isPlayer(l);})}];
-  MIEMBROS.forEach(function(m){groups.push({key:m,icon:(PLAYER_ICON[m]||"👤"),label:m,arr:LOGROS.filter(function(l){return l.personaje===m;})});});
+  MIEMBROS.forEach(function(m){groups.push({key:m,icon:iconPJHTML(m),label:m,arr:LOGROS.filter(function(l){return l.personaje===m;})});});
   groups.forEach(function(g){
     var s=stats(g.arr);var b=document.createElement("button");b.className="subtab"+((state.sub===g.key)?" active":"");
     b.innerHTML=g.icon+" "+g.label+'<span class="c">'+s.u+"/"+s.t+"</span>";
@@ -898,7 +1017,10 @@ function renderList(){
   var q=norm(state.search);
   if(q)arr=arr.filter(function(l){return norm(l.nombre+" "+l.descripcion).indexOf(q)>=0;});
   var list=document.getElementById("list");list.innerHTML="";
-  if(editMode)list.appendChild(buildAddForm());
+  if(editMode){
+    if(state.tab==="ind"&&state.sub!=="todos"&&MIEMBROS.indexOf(state.sub)>=0)list.appendChild(buildPjIconBox());
+    list.appendChild(buildAddForm());
+  }
   if(!arr.length){var em=document.createElement("div");em.className="empty";em.textContent="No hay logros que mostrar con estos filtros.";list.appendChild(em);return;}
   arr.forEach(function(l){list.appendChild(buildCard(l));});
 }
@@ -972,8 +1094,12 @@ function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reloa
   document.getElementById("perfil-modal").addEventListener("click",function(e){if(e.target.id==="perfil-modal")closePerfil();});
   document.getElementById("perfil-foto-btn").addEventListener("click",function(){document.getElementById("foto-input").click();});
   document.getElementById("perfil-pass-btn").addEventListener("click",cambiarPass);
-  document.getElementById("foto-input").addEventListener("change",function(e){if(e.target.files&&e.target.files[0])cambiarFoto(e.target.files[0]);e.target.value="";});
-  document.getElementById("icono-input").addEventListener("change",function(e){if(e.target.files&&e.target.files[0])cambiarIconoLogro(e.target.files[0]);e.target.value="";});
+  document.getElementById("foto-input").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];if(f){if(fotoCampId){cambiarFotoCampana(f,fotoCampId);fotoCampId=null;}else cambiarFoto(f);}e.target.value="";});
+  document.getElementById("icono-input").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];if(f){if(pendingPjIcon){cambiarIconoPJ(f,pendingPjIcon);pendingPjIcon=null;}else cambiarIconoLogro(f);}e.target.value="";});
+  document.getElementById("cuentas-btn").addEventListener("click",openCuentas);
+  document.getElementById("cuentas-close").addEventListener("click",closeCuentas);
+  document.getElementById("cuentas-modal").addEventListener("click",function(e){if(e.target.id==="cuentas-modal")closeCuentas();});
+  document.getElementById("miembros-foto").addEventListener("click",function(){fotoCampId=miembrosCampId;document.getElementById("foto-input").click();});
   loadUsers(function(){
     var sess="";try{sess=localStorage.getItem(SESSION)||"";}catch(e){}
     if(sess&&Object.prototype.hasOwnProperty.call(USERS,sess))startSession(sess); else show("login");
