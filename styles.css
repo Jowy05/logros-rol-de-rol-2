@@ -266,7 +266,8 @@
   .gmbadge{position:absolute;right:-6px;bottom:-6px;background:#3a2c10;color:#f0c33c;border:1px solid #6b5114;border-radius:8px;font-size:9px;font-weight:700;padding:1px 4px;line-height:1.25;}
   .miembro-row .mh{font-size:11px;color:var(--muted);text-align:center;}
   .miembro-row .mu{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--text);}
-  .miembro-row span:nth-child(2),.miembro-row span:nth-child(3){text-align:center;}
+  .miembro-row span:nth-child(2),.miembro-row span:nth-child(3),.miembro-row span:nth-child(4){text-align:center;}
+  .ic .gmbadge{top:-7px;bottom:auto;}
   .miembro-row input{width:17px;height:17px;accent-color:var(--accent);}
   .miembro-head{border-bottom:1px solid var(--accent2);}
 
@@ -376,4 +377,5 @@
     .feed-title{display:none;}
     .cuenta-row{grid-template-columns:1fr auto auto;gap:6px;}
     .cuenta-nombre{grid-column:1 / -1;}
+    .miembro-row{grid-template-columns:1fr 46px 46px 46px;gap:5px;}
   }
