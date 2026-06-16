@@ -30,6 +30,7 @@
     </div>
     <button class="btn dm" id="crear-camp" style="display:none;">➕ Crear campaña</button>
     <button class="btn dm" id="crear-usuario" style="display:none;">➕ Crear usuario</button>
+    <button class="btn" id="guiagm-btn">📖 Guía GM</button>
     <span class="who" id="camp-whoami" title="Ver mi perfil"></span>
     <button class="btn" id="camp-logout">Salir</button>
   </div>
@@ -76,19 +77,16 @@
   <div class="foot">Progreso en la nube (Firebase). Cada lista la marca su dueño o el GM/Owner; todos las ven.</div>
 </div>
 
-<button class="dm-fab" id="dm-fab" type="button">📖 Guía / Editar</button>
+<button class="dm-fab" id="dm-fab" type="button">📖 Cómo funciona</button>
 
 <div class="modal" id="guia-modal">
   <div class="modal-card">
     <div class="modal-head">
-      <h2>📖 Guía del GM</h2>
-      <button class="btn" id="guia-edit-btn" type="button">✏️ Editar</button>
-      <button class="btn dm" id="guia-save-btn" type="button" style="display:none;">💾 Guardar guía</button>
+      <h2>📖 Cómo funciona</h2>
       <button class="btn" id="guia-close-btn" type="button">✕ Cerrar</button>
     </div>
     <div class="modal-body">
       <div class="guia-view" id="guia-view"></div>
-      <textarea class="guia-edit" id="guia-edit" style="display:none;" placeholder="Escribe aquí la guía en Markdown..."></textarea>
     </div>
   </div>
 </div>
@@ -118,13 +116,28 @@
 <div class="modal" id="perfil-modal">
   <div class="modal-card">
     <div class="modal-head">
-      <h2>👤 Mi perfil</h2>
+      <h2>Mi perfil</h2>
       <button class="btn dm" id="perfil-foto-btn" type="button">📷 Cambiar foto</button>
       <button class="btn" id="perfil-close" type="button">✕ Cerrar</button>
     </div>
     <div class="modal-body" id="perfil-body"></div>
   </div>
 </div>
+<div class="modal" id="guiagm-modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>📖 Guía del GM</h2>
+      <button class="btn" id="guiagm-edit-btn" type="button" style="display:none;">✏️ Editar</button>
+      <button class="btn dm" id="guiagm-save-btn" type="button" style="display:none;">💾 Guardar</button>
+      <button class="btn" id="guiagm-close-btn" type="button">✕ Cerrar</button>
+    </div>
+    <div class="modal-body">
+      <div class="guia-view" id="guiagm-view"></div>
+      <textarea class="guia-edit" id="guiagm-edit" style="display:none;" placeholder="Escribe la guía en Markdown..."></textarea>
+    </div>
+  </div>
+</div>
+
 <input type="file" id="foto-input" accept="image/*" style="display:none">
 <input type="file" id="icono-input" accept="image/*" style="display:none">
 
@@ -148,6 +161,7 @@ aplicarUsuarios(SEED_USERS);
 function rolDe(u){return ROL[u]||"jugador";}
 // puedeCrear: por ROL GLOBAL — quién puede crear campañas y usuarios.
 function puedeCrear(){var r=rolDe(currentUser);return r==="owner"||r==="gm";}
+function esOwner(){return rolDe(currentUser)==="owner";}
 // esGM: manda DENTRO de una campaña concreta (marca cualquier logro, edita, asigna).
 // El Owner manda en TODAS; un GM solo en las que creó (info.gm) o donde le dieron GM (info.gms).
 function esGM(info){ return rolDe(currentUser)==="owner" || !!(info&&(info.gm===currentUser||(info.gms&&info.gms[currentUser]))); }
@@ -258,7 +272,7 @@ function show(which){
   document.getElementById("login").style.display=(which==="login")?"flex":"none";
   document.getElementById("campaigns").style.display=(which==="camp")?"block":"none";
   document.getElementById("app").style.display=(which==="app")?"block":"none";
-  document.getElementById("dm-fab").style.display=(which==="app"&&esGM(campInfo))?"inline-flex":"none";
+  document.getElementById("dm-fab").style.display=(which==="app")?"inline-flex":"none";
 }
 
 // ====== PERFIL ======
@@ -497,7 +511,6 @@ function fbProg(id,val){
   fetch(url,opt).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});
 }
 function saveLogros(){setStatus("Guardando…");fetch(FB+"/campanas/"+currentCamp+"/logros.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(LOGROS)}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});}
-function saveGuia(){if(guiaEditing)guiaMD=document.getElementById("guia-edit").value;setStatus("Guardando…");fetch(FB+"/campanas/"+currentCamp+"/guia.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(guiaMD||"")}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");alert(r.ok?"✅ Guía guardada.":"⚠ No se pudo guardar.");}).catch(function(){setStatus("⚠ Sin conexión");});}
 function debounce(key,fn){if(saveTimers[key])clearTimeout(saveTimers[key]);saveTimers[key]=setTimeout(fn,700);}
 
 function toggle(l){
@@ -531,10 +544,98 @@ function addLogro(){
 function moveLogro(l,dir){var view=viewLogros();var iv=view.indexOf(l);var t=iv+dir;if(t<0||t>=view.length)return;var other=view[t];var i1=LOGROS.indexOf(l),i2=LOGROS.indexOf(other);if(i1<0||i2<0)return;var tmp=LOGROS[i1];LOGROS[i1]=LOGROS[i2];LOGROS[i2]=tmp;render();debounce("ord",saveLogros);}
 
 function mdRender(md){ try{ if(window.marked){ return marked.parse?marked.parse(md):marked(md); } }catch(e){} return '<pre style="white-space:pre-wrap;word-break:break-word;">'+esc(md)+'</pre>'; }
-function renderGuia(){var v=document.getElementById("guia-view"),e=document.getElementById("guia-edit"),eb=document.getElementById("guia-edit-btn"),sb=document.getElementById("guia-save-btn");if(guiaEditing){e.value=guiaMD||"";e.style.display="block";v.style.display="none";sb.style.display="inline-block";eb.textContent="👁 Vista";}else{v.innerHTML=mdRender(guiaMD||"_(Guía vacía. Pulsa Editar para escribirla.)_");v.style.display="block";e.style.display="none";sb.style.display="none";eb.textContent="✏️ Editar";}}
-function openGuia(){document.getElementById("guia-modal").classList.add("open");renderGuia();}
-function closeGuia(){document.getElementById("guia-modal").classList.remove("open");}
-function toggleGuiaEdit(){if(guiaEditing){guiaMD=document.getElementById("guia-edit").value;guiaEditing=false;}else{guiaEditing=true;}renderGuia();}
+
+// ===== GUÍA FIJA dentro de la campaña (cómo funciona la app; NO editable, la ven todos) =====
+var GUIA_APP=`# 📖 Cómo funciona
+
+Guía rápida de esta pantalla. *(Algunos botones solo los ve el GM.)*
+
+## Marcar logros
+- Pulsa **Marcar** en un logro para darlo por conseguido (se pone dorado, suena y salta confeti).
+- **Cada uno marca su propia lista**: marcas los de tu personaje; el GM puede marcar cualquiera. Los de **Grupo** y **Para todos** los marca el GM.
+- Vuelve a pulsar para desmarcar. Se guarda solo en la nube y lo ve todo el grupo.
+- 🔒 = ese logro no te toca marcarlo a ti.
+
+## Pestañas
+- **🛡️ Grupo**: logros de toda la party.
+- **👤 Individuales**: **🌐 Para todos** + una pestaña por personaje.
+
+## Buscar y filtrar
+- **🔍 Buscador**: encuentra un logro por su nombre o descripción.
+- **Desplegable** (Todos / Pendientes / Conseguidos): filtra lo que se ve.
+
+## Qué muestra cada logro
+- Icono, **nombre** y **descripción**.
+- 🎁 **Recompensa** (si tiene).
+- Etiqueta de **rareza** (si se la han puesto).
+- ✓ **Fecha** y **quién** lo consiguió.
+
+## Rarezas
+| Rareza | Color | Para... |
+|---|---|---|
+| **Común** | gris | logros del día a día |
+| **Raro** | azul | piden algo de esfuerzo |
+| **Épico** | morado | gestas importantes |
+| **Legendario** | dorado | hazañas únicas de la campaña |
+
+## Tu perfil
+Pulsa tu **avatar** (arriba) para ver tu perfil estilo Steam: foto, logros y campañas. Clica un logro para verlo en grande con su descripción.
+
+---
+## Solo el GM
+- **✏️ Modo edición**: añade, edita, borra y reordena logros (arrastrando o con ▲▼). En cada logro puedes cambiar **nombre, descripción, 🎁 recompensa, rareza** y el **icono** (un emoji o **📷 una imagen** tuya).
+- **➕ Añadir**: crea un logro en la pestaña en la que estés.
+- **📊 Resumen**: cuántos logros lleva cada jugador y el total de la campaña.`;
+
+// ===== GUÍA DEL GM en el menú principal (la ven todos; SOLO el Owner la edita; global en /guia_gm) =====
+var GUIA_GM_DEFAULT=`# 📖 Guía del GM — Menú principal
+
+Esta es la pantalla de **campañas**: todo lo que se gestiona *antes* de entrar a jugar. *(Editable solo por el Owner.)*
+
+## Roles
+- **Owner** (Joel): dueño de la app. Manda en **todas** las campañas; crea campañas y usuarios.
+- **GM**: crea campañas y usuarios. Manda **solo** en las campañas que ha creado o donde otro GM le dio acceso.
+- **Jugador**: entra donde es miembro y marca **su** lista.
+
+## ➕ Crear campaña  *(Owner / GM)*
+Ponle nombre. Se crea vacía y quedas como **GM creador**. Luego usa **👥 Miembros / GM** para añadir gente.
+
+## ➕ Crear usuario  *(Owner / GM)*
+Pon nombre y contraseña. El nuevo usuario aparece en el **login** y en la lista de miembros; empieza sin campañas hasta que lo añadas.
+
+## 👥 Miembros / GM  *(quien manda en esa campaña)*
+Dos casillas por persona:
+- **Miembro**: entra y tiene **su lista** (marca solo lo suyo).
+- **GM**: **manda** en esa campaña (marca cualquier logro, edita, asigna y ve el Resumen).
+
+El **creador** sale como GM fijo. Marca **GM** a quien quieras que te ayude a dirigir.
+
+> Un GM **no** entra en campañas ajenas salvo que su GM lo añada: así cada campaña queda separada.
+
+## Tu perfil
+Pulsa tu **avatar** (arriba a la derecha) para ver tu perfil y cambiar la foto con **📷 Cambiar foto**.
+
+## Entrar / Salir
+- **Entrar**: abre la campaña. **🔒 No asignado** = pídele a su GM que te añada.
+- **Salir**: cierra sesión.`;
+
+// Guía fija de la app (dentro de la campaña): solo lectura, la ven todos
+function openGuia(){ document.getElementById("guia-view").innerHTML=mdRender(GUIA_APP); document.getElementById("guia-modal").classList.add("open"); }
+function closeGuia(){ document.getElementById("guia-modal").classList.remove("open"); }
+
+// Guía del GM (menú principal): la leen todos, la edita SOLO el Owner
+var guiaGM=null, guiaGMEditing=false;
+function loadGuiaGM(cb){ fetch(FB+"/guia_gm.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(g){ guiaGM=(typeof g==="string"&&g.trim())?g:GUIA_GM_DEFAULT; if(cb)cb(); }).catch(function(){ guiaGM=GUIA_GM_DEFAULT; if(cb)cb(); }); }
+function renderGuiaGM(){
+  var v=document.getElementById("guiagm-view"),e=document.getElementById("guiagm-edit"),eb=document.getElementById("guiagm-edit-btn"),sb=document.getElementById("guiagm-save-btn");
+  var puede=esOwner(); eb.style.display=puede?"inline-block":"none";
+  if(guiaGMEditing&&puede){ e.value=guiaGM||""; e.style.display="block"; v.style.display="none"; sb.style.display="inline-block"; eb.textContent="👁 Vista"; }
+  else{ guiaGMEditing=false; v.innerHTML=mdRender(guiaGM||""); v.style.display="block"; e.style.display="none"; sb.style.display="none"; eb.textContent="✏️ Editar"; }
+}
+function openGuiaGM(){ document.getElementById("guiagm-modal").classList.add("open"); document.getElementById("guiagm-view").innerHTML="Cargando…"; guiaGMEditing=false; loadGuiaGM(renderGuiaGM); }
+function closeGuiaGM(){ document.getElementById("guiagm-modal").classList.remove("open"); }
+function toggleGuiaGMEdit(){ if(!esOwner())return; if(guiaGMEditing){ guiaGM=document.getElementById("guiagm-edit").value; guiaGMEditing=false; } else guiaGMEditing=true; renderGuiaGM(); }
+function saveGuiaGM(){ if(!esOwner())return; if(guiaGMEditing)guiaGM=document.getElementById("guiagm-edit").value; setStatus("Guardando…"); fetch(FB+"/guia_gm.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(guiaGM||"")}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error"); guiaGMEditing=false; renderGuiaGM(); alert(r.ok?"✅ Guía guardada.":"⚠ No se pudo guardar.");}).catch(function(){setStatus("⚠ Sin conexión");}); }
 
 function openResumen(){
   document.getElementById("resumen-modal").classList.add("open");
@@ -646,7 +747,7 @@ function render(){
   var gm=esGM(campInfo);
   document.getElementById("editwrap").style.display=gm?"flex":"none";
   document.getElementById("resumenbtn").style.display=gm?"inline-block":"none";
-  document.getElementById("dm-fab").style.display=gm?"inline-flex":"none";
+  document.getElementById("dm-fab").style.display="inline-flex";
   if(!gm&&editMode){editMode=false;var te=document.getElementById("t-edit");if(te)te.checked=false;}
   renderTabs();renderList();renderGlobal();
 }
@@ -675,9 +776,12 @@ function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reloa
   document.getElementById("camp-logout").addEventListener("click",logout);
   document.getElementById("dm-fab").addEventListener("click",openGuia);
   document.getElementById("guia-close-btn").addEventListener("click",closeGuia);
-  document.getElementById("guia-edit-btn").addEventListener("click",toggleGuiaEdit);
-  document.getElementById("guia-save-btn").addEventListener("click",saveGuia);
   document.getElementById("guia-modal").addEventListener("click",function(e){if(e.target.id==="guia-modal")closeGuia();});
+  document.getElementById("guiagm-btn").addEventListener("click",openGuiaGM);
+  document.getElementById("guiagm-close-btn").addEventListener("click",closeGuiaGM);
+  document.getElementById("guiagm-edit-btn").addEventListener("click",toggleGuiaGMEdit);
+  document.getElementById("guiagm-save-btn").addEventListener("click",saveGuiaGM);
+  document.getElementById("guiagm-modal").addEventListener("click",function(e){if(e.target.id==="guiagm-modal")closeGuiaGM();});
   document.getElementById("resumen-close").addEventListener("click",closeResumen);
   document.getElementById("resumen-modal").addEventListener("click",function(e){if(e.target.id==="resumen-modal")closeResumen();});
   document.getElementById("camp-whoami").addEventListener("click",openPerfil);
