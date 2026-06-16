@@ -428,7 +428,10 @@ function computarCuenta(camps,user){
     total+=tiles.length; xpTotal+=xpCamp;
     misCamps.push({id:id,nombre:info.nombre||id,foto:info.foto||null,gm:info.gm,bloqueada:!!info.bloqueada,logros:tiles});
   });
-  return {misCamps:misCamps,total:total,xpTotal:xpTotal,nivel:nivelDeXP(xpTotal),prestigio:prestigio,premios:premios};
+  // Logro especial hardcodeado solo para el Owner (no está en la BD).
+  var especiales=[];
+  if(rolDe(user)==="owner"){ especiales.push({nombre:"Creador del todo",descripcion:"Forjó este sistema de logros entero, desde la primera línea. El que lo hizo todo. 👑",dificultad:"Legendario",icono:"👑",categoria:"especial"}); total+=especiales.length; xpTotal+=500; }
+  return {misCamps:misCamps,total:total,xpTotal:xpTotal,nivel:nivelDeXP(xpTotal),prestigio:prestigio,premios:premios,especiales:especiales};
 }
 
 function utf8bytes(str){
@@ -537,9 +540,14 @@ function renderPerfil(){
     var pk=Object.keys(cu.premios);
     if(pk.length){ html+='<div class="premios"><h3 class="perfil-h3">🏅 Premios</h3>'; pk.forEach(function(cat){ html+='<span class="premio-chip">'+esc(cat)+' ×'+cu.premios[cat]+'</span>'; }); html+='</div>'; }
     html+='<div class="perfil-feat" id="perfil-feat"></div>';
+    var gi=0;
+    if(cu.especiales&&cu.especiales.length){
+      html+='<h3 class="perfil-h3">🏆 Especiales</h3><div class="perfil-camp"><div class="logro-grid">';
+      cu.especiales.forEach(function(l){ var rc=l.dificultad?(" r-"+difKey(l.dificultad)):""; perfilLogros.push({l:l,camp:"Especial"}); html+='<div class="logro-tilewrap"><button class="logro-tile'+rc+'" type="button" data-i="'+gi+'" title="'+esc(l.nombre)+'">'+iconHTML(l)+'</button></div>'; gi++; });
+      html+='</div></div>';
+    }
     html+='<h3 class="perfil-h3">'+(propio?'Mis campañas':'Campañas')+'</h3>';
     if(!cu.misCamps.length)html+='<p style="color:var(--muted);font-size:13px;">Sin campañas todavía.</p>';
-    var gi=0;
     cu.misCamps.forEach(function(mcp){
       html+='<div class="perfil-camp"><h4>'+(mcp.foto?('<img class="camp-foto-mini" src="'+mcp.foto+'" alt="">'):'')+esc(mcp.nombre)+(mcp.bloqueada?' 🔒':'')+' <span style="color:var(--muted);font-weight:400;font-size:12.5px;">— '+mcp.logros.length+' conseguidos</span></h4>';
       if(mcp.logros.length){
