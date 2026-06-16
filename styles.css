@@ -136,3 +136,23 @@
   .d-epico{background:#2e1f47;color:#c08bff;}
   .d-legendario{background:#3a2c10;color:#f0c33c;}
   .dif-input{background:#0f1c27;border:1px solid var(--line);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12.5px;margin-top:6px;outline:none;cursor:pointer;}
+  .campwrap{max-width:760px;margin:0 auto;padding:26px 18px 60px;}
+  .camp-top{display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap;}
+  .camp-top .logo{font-size:34px;}
+  .camp-top h1{flex:1;min-width:160px;}
+  .camp-sub{color:var(--muted);font-size:13px;margin-top:2px;}
+  .camp-card{display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px 18px;margin-bottom:12px;}
+  .camp-card.locked{opacity:.5;}
+  .camp-ic{font-size:30px;flex:0 0 auto;}
+  .camp-info{flex:1;min-width:0;}
+  .camp-nombre{font-size:17px;font-weight:600;color:#fff;}
+  .camp-meta{font-size:12.5px;color:var(--muted);margin-top:3px;}
+  .camp-actions{display:flex;gap:8px;flex-wrap:wrap;flex:0 0 auto;}
+  .miembros-list{display:flex;flex-direction:column;gap:8px;}
+  .miembros-list label{display:flex;align-items:center;gap:10px;background:#16242f;border:1px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer;font-size:14px;}
+  .miembros-list input{width:17px;height:17px;accent-color:var(--accent);}
+  .rol-badge{font-size:10px;text-transform:uppercase;letter-spacing:.4px;padding:1px 7px;border-radius:10px;margin-left:8px;background:#2a3b4d;color:#9fc0e0;vertical-align:middle;}
+  .rol-owner{background:#3a2c10;color:#f0c33c;}
+  .rol-gm{background:#2e1f47;color:#c08bff;}
+  .toggle.disabled{opacity:.35;cursor:not-allowed;pointer-events:none;}
+  .quien{font-size:11.5px;color:#8fb98f;margin-top:5px;}
