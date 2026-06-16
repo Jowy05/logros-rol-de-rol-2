@@ -342,20 +342,25 @@ function nivelDeXP(xp){var lvl=1,need=50,acc=0;while(xp>=acc+need){acc+=need;lvl
 function marcoNivel(lvl){ if(lvl<=5)return ""; return ["comun","raro","epico","legendario"][Math.min(Math.floor((lvl-6)/10),3)]; }
 var NOM_CATS=["Mejor acción de la sesión","Peor acción de la sesión","Acción más divertida","MVP de los combates"];
 // Resumen de cuenta de un usuario a partir de TODAS las campañas: XP, nivel, prestigio, premios y logros.
-// XP: logros propios x1; si eres el GM CREADOR de la campaña, los de grupo cuentan para ti x2 y los individuales un 50%.
-// Prestigio: +1 estrella y +500 XP por cada campaña tuya que esté bloqueada (terminada).
+// Dueño = personaje del logro (individual) o quien lo marcó (logros 'para todos' sin personaje). Los de GRUPO NO son de nadie: solo cuentan para el GM creador (x2).
+// XP: logros propios x1; si eres el GM CREADOR, grupo x2 (se te muestran) + individuales ajenos un 50% (solo XP).
+// Prestigio: +1 estrella y +500 XP por cada campaña EN LA QUE PARTICIPAS que esté bloqueada (terminada).
 function computarCuenta(camps,user){
   camps=camps||{};
   var misCamps=[],total=0,xpTotal=0,prestigio=0,premios={};
   Object.keys(camps).forEach(function(id){
     var c=camps[id]; if(!c||!c.info)return; var info=c.info;
+    // premios (nominaciones): contar SIEMPRE, aunque no participes en la campaña
+    var noms=c.nominaciones||{};
+    Object.keys(noms).forEach(function(sid){ var v=noms[sid]&&noms[sid].votos; if(!v)return; Object.keys(v).forEach(function(cat){ var vv=v[cat]||{}; Object.keys(vv).forEach(function(voter){ if(vv[voter]===user)premios[cat]=(premios[cat]||0)+1; }); }); });
     var esMiembro=(info.gm===user)||(info.miembros&&info.miembros[user])||(info.gms&&info.gms[user]);
     var esCreador=(info.gm===user);
     var logros=toArr(c.logros),prog=c.progreso||{},tiles=[],xpCamp=0;
     logros.forEach(function(l){
-      var s=slug(l.nombre); if(!prog[s])return;
+      var s=slug(l.nombre),pe=prog[s]; if(!pe)return;
+      var por=(pe&&typeof pe==="object")?pe.por:null;
       var esGrupo=(l.categoria==="grupo");
-      var esMio=(l.personaje===user)||(prog[s].por===user);
+      var esMio = esGrupo ? false : (l.personaje ? (l.personaje===user) : (por===user));
       if(esMio){ tiles.push(l); xpCamp+=xpDeRareza(l.dificultad); }
       else if(esCreador){ if(esGrupo){ tiles.push(l); xpCamp+=xpDeRareza(l.dificultad)*2; } else { xpCamp+=Math.round(xpDeRareza(l.dificultad)*0.5); } }
     });
@@ -363,8 +368,6 @@ function computarCuenta(camps,user){
     if(info.bloqueada){ prestigio++; xpCamp+=500; }
     total+=tiles.length; xpTotal+=xpCamp;
     misCamps.push({id:id,nombre:info.nombre||id,foto:info.foto||null,gm:info.gm,bloqueada:!!info.bloqueada,logros:tiles});
-    var noms=c.nominaciones||{};
-    Object.keys(noms).forEach(function(sid){ var v=noms[sid]&&noms[sid].votos; if(!v)return; Object.keys(v).forEach(function(cat){ var vv=v[cat]||{}; Object.keys(vv).forEach(function(voter){ if(vv[voter]===user)premios[cat]=(premios[cat]||0)+1; }); }); });
   });
   return {misCamps:misCamps,total:total,xpTotal:xpTotal,nivel:nivelDeXP(xpTotal),prestigio:prestigio,premios:premios};
 }
