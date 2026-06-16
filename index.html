@@ -100,7 +100,7 @@ const PLAYERS=[
   {key:"Oriol",icon:"⛑️"}
 ];
 const USERS={
-  "Joel":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
+  "Joel":"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",
   "Cristina":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
   "Carol":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
   "Leomar":"37ef7424202b86d737af07d4593f8d6c2ecfedfef061a2432ac3a6deecc267f7",
@@ -108,6 +108,8 @@ const USERS={
   "Didac":"a2fc86bac4cec78448d73cbd19b5e77df108a861a5d553ac1a6663fa8069cfeb"
 };
 const DM="Didac";
+const ADMINS=["Didac","Joel"]; // GM / Owner (mismos permisos)
+function isAdmin(u){return ADMINS.indexOf(u)>=0;}
 
 let LOGROS=[], unlocked={}, allProgreso={}, currentUser="", editMode=false;
 var guiaMD=null, guiaEditing=false, dragSrc=null;
@@ -430,9 +432,9 @@ function renderGlobal(){
   document.getElementById("g-perfect").textContent=(s.u===s.t&&s.t>0)?"🏅 ¡Todos tus logros conseguidos!":(pct+"% completado");
 }
 function render(){
-  document.getElementById("editwrap").style.display=(currentUser===DM)?"flex":"none";
-  document.getElementById("resumenbtn").style.display=(currentUser===DM)?"inline-block":"none";
-  document.getElementById("dm-fab").style.display=(currentUser===DM)?"inline-flex":"none";
+  document.getElementById("editwrap").style.display=isAdmin(currentUser)?"flex":"none";
+  document.getElementById("resumenbtn").style.display=isAdmin(currentUser)?"inline-block":"none";
+  document.getElementById("dm-fab").style.display=isAdmin(currentUser)?"inline-flex":"none";
   renderTabs();renderList();renderGlobal();
 }
 
