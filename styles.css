@@ -137,10 +137,13 @@
   .d-legendario{background:#3a2c10;color:#f0c33c;}
   .dif-input{background:#0f1c27;border:1px solid var(--line);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12.5px;margin-top:6px;outline:none;cursor:pointer;}
   .campwrap{max-width:760px;margin:0 auto;padding:26px 18px 60px;}
-  .camp-top{display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap;}
-  .camp-top .logo{font-size:34px;}
-  .camp-top h1{flex:1;min-width:160px;}
+  .camp-top{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+  .camp-top .logo{font-size:34px;flex:0 0 auto;}
+  .camp-top h1{flex:1;min-width:0;margin:0;font-size:24px;color:#fff;font-weight:600;}
+  .camp-user{display:flex;align-items:center;gap:10px;flex:0 0 auto;}
+  .camp-actions-bar{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:20px;}
   .camp-sub{color:var(--muted);font-size:13px;margin-top:2px;}
+  .lockbar{background:#3a1c1c;border:1px solid #6b2a2a;color:#ffd0d0;border-radius:6px;padding:9px 14px;font-size:13px;margin-bottom:14px;text-align:center;line-height:1.5;}
   .camp-card{display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px 18px;margin-bottom:12px;}
   .camp-card.locked{opacity:.5;}
   .camp-ic{font-size:30px;flex:0 0 auto;}
