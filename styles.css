@@ -325,6 +325,7 @@
   .titulo{font-weight:700;letter-spacing:.3px;}
   .titulo.r-comun{color:#b0c3d9;} .titulo.r-raro{color:#7fb2f0;} .titulo.r-epico{color:#c08bff;} .titulo.r-legendario{color:#f0c33c;} .titulo.r-mitica{color:#ff5a5a;}
   .titulo-eq{font-size:13px;margin-top:3px;}
+  .dir-titulo{font-size:11.5px;margin:1px 0;}
   .who-titulo{font-size:11px;margin-left:6px;}
   .titulos-box{margin:10px 0 4px;}
   .titulo-chips{display:flex;flex-wrap:wrap;gap:6px;}
