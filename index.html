@@ -249,7 +249,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=26; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=27; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -1816,6 +1816,7 @@ function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reloa
   document.getElementById("ganadores-close").addEventListener("click",closeGanadores);
   document.getElementById("ganadores-modal").addEventListener("click",function(e){if(e.target.id==="ganadores-modal")closeGanadores();});
   checkVersion();
+  setTimeout(function(){var _vb=document.getElementById("verbadge"); if(_vb)_vb.textContent="v"+APP_VER;},0);
   loadUsers(function(){
     var sess="";try{sess=localStorage.getItem(SESSION)||"";}catch(e){}
     if(sess&&Object.prototype.hasOwnProperty.call(USERS,sess)){
@@ -1826,5 +1827,6 @@ function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reloa
   });
 })();
 </script>
+<div id="verbadge" style="position:fixed;bottom:4px;right:6px;font-size:10px;color:#5a6b7a;z-index:5;pointer-events:none;user-select:none;">v?</div>
 </body>
 </html>
