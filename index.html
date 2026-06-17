@@ -279,9 +279,11 @@ function crearUsuario(after){
   var pass=(window.prompt("Contraseña para "+nombre+":","")||"").trim();
   if(!pass){alert("Hace falta una contraseña.");return;}
   setStatus("Creando usuario…");
-  fetch(FB+"/usuarios/"+encodeURIComponent(nombre)+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({pass:sha256hex(pass),rol:"jugador"})})
-    .then(function(r){if(!r.ok)throw new Error("err");setStatus("✓ Guardado");loadUsers(function(){alert("✅ Usuario «"+nombre+"» creado. Ya puedes añadirlo a campañas con «👥 Miembros».");if(after)after();});})
-    .catch(function(){setStatus("⚠ Error");alert("No se pudo crear el usuario.");});
+  fetch(FB+"/usuarios/"+encodeURIComponent(nombre)+".json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(ex){
+    if(ex){ setStatus(""); alert("Ya existe un usuario con ese nombre."); return; }
+    return fetch(FB+"/usuarios/"+encodeURIComponent(nombre)+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({pass:sha256hex(pass),rol:"jugador"})})
+      .then(function(r){if(!r.ok)throw new Error("err");setStatus("✓ Guardado");loadUsers(function(){alert("✅ Usuario «"+nombre+"» creado. Ya puedes añadirlo a campañas con «👥 Miembros».");if(after)after();});});
+  }).catch(function(){setStatus("⚠ Error");alert("No se pudo crear el usuario.");});
 }
 
 // ====== PANEL DE CUENTAS (solo Owner): ver y modificar todas las cuentas ======
@@ -757,9 +759,11 @@ function registrarUsuario(){
   if(rep===null)return;
   if(pass!==rep.trim()){alert("Las contraseñas no coinciden.");return;}
   document.getElementById("li-err").textContent="Creando cuenta…";
-  fetch(FB+"/usuarios/"+encodeURIComponent(nombre)+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({pass:sha256hex(pass),rol:"jugador"})})
-    .then(function(r){if(!r.ok)throw 0; USERS[nombre]=sha256hex(pass); ROL[nombre]="jugador"; try{localStorage.setItem(SESSION,nombre);}catch(e){} document.getElementById("li-err").textContent=""; alert("✅ ¡Cuenta creada! Ya estás dentro. Pídele a un GM que te añada a una campaña."); startSession(nombre);})
-    .catch(function(){document.getElementById("li-err").textContent="No se pudo crear la cuenta.";});
+  fetch(FB+"/usuarios/"+encodeURIComponent(nombre)+".json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(ex){
+    if(ex){ document.getElementById("li-err").textContent="Ese nombre ya está cogido. Elige otro."; return; }
+    return fetch(FB+"/usuarios/"+encodeURIComponent(nombre)+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({pass:sha256hex(pass),rol:"jugador"})})
+      .then(function(r){if(!r.ok)throw 0; USERS[nombre]=sha256hex(pass); ROL[nombre]="jugador"; try{localStorage.setItem(SESSION,nombre);}catch(e){} document.getElementById("li-err").textContent=""; alert("✅ ¡Cuenta creada! Ya estás dentro. Pídele a un GM que te añada a una campaña."); startSession(nombre);});
+  }).catch(function(){document.getElementById("li-err").textContent="No se pudo crear la cuenta.";});
 }
 // aplicarRolUI: ajusta los botones del menú según el rol EFECTIVO (respeta la vista jugador).
 function aplicarRolUI(){
@@ -933,6 +937,8 @@ function puedeEditarInv(sec){ if(campInfo&&campInfo.bloqueada)return false; if(e
 // "Para todos" = logro general (sin personaje, no grupo, no gm). Lo marca el GM y elige a qué jugador(es) se lo lleva.
 function esParaTodos(l){ return !l.personaje && l.categoria!=="grupo" && l.categoria!=="gm"; }
 function reqNombre(l){ if(!l.requiere)return ""; var p=LOGROS.find(function(x){return slug(x.nombre)===l.requiere;}); return p?p.nombre:"(?)"; }
+// Dependientes (transitivos) de un slug que estén actualmente conseguidos — para desmarcar en cascada.
+function dependientesHechos(idPadre){ var out=[], cola=[idPadre], visto={}; while(cola.length){ var cur=cola.shift(); LOGROS.forEach(function(x){ var xs=slug(x.nombre); if(x.requiere===cur && progreso[xs] && !visto[xs]){ visto[xs]=true; out.push(x); cola.push(xs); } }); } return out; }
 
 function fbProg(id,val){
   setStatus("Guardando…");
@@ -947,8 +953,13 @@ function toggle(l){
   if(!puedeMarcar(l)){return;}
   var id=slug(l.nombre),y=window.scrollY;
   if(progreso[id]){
-    if(!confirm('¿Desmarcar "'+l.nombre+'"? Volverá a quedar pendiente.')){ render(); window.scrollTo(0,y); return; }
-    delete progreso[id]; fbProg(id,null); logEvento("✗ desmarcó",l.nombre); render(); window.scrollTo(0,y);
+    var deps=dependientesHechos(id);
+    var msg='¿Desmarcar "'+l.nombre+'"? Volverá a quedar pendiente.';
+    if(deps.length)msg='¿Desmarcar "'+l.nombre+'"?\n\nTambién se desmarcarán los logros encadenados que dependen de él:\n• '+deps.map(function(d){return d.nombre;}).join("\n• ");
+    if(!confirm(msg)){ render(); window.scrollTo(0,y); return; }
+    delete progreso[id]; fbProg(id,null); logEvento("✗ desmarcó",l.nombre);
+    deps.forEach(function(d){ var ds=slug(d.nombre); if(progreso[ds]){ delete progreso[ds]; fbProg(ds,null); logEvento("✗ desmarcó (cadena)",d.nombre); } });
+    render(); window.scrollTo(0,y);
   }
   else {
     if(bloqueado(l)){ alert("Antes tienes que conseguir: "+reqNombre(l)); render(); window.scrollTo(0,y); return; }
@@ -998,10 +1009,13 @@ function toast(nombre){
 function playSound(){try{var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;var ctx=new AC(),notes=[523.25,659.25,783.99,1046.5];notes.forEach(function(f,i){var o=ctx.createOscillator(),g=ctx.createGain();o.type="triangle";o.frequency.value=f;o.connect(g);g.connect(ctx.destination);var t=ctx.currentTime+i*0.10;g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.22,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+0.26);o.start(t);o.stop(t+0.28);});}catch(e){}}
 function confetti(){var colors=["#f0c33c","#66c0f4","#a4d007","#ff6b6b","#a653ff","#ffffff"];for(var i=0;i<42;i++){var d=document.createElement("div");d.className="confetti";d.style.left=(Math.random()*100)+"vw";d.style.background=colors[i%colors.length];d.style.animationDelay=(Math.random()*0.25)+"s";d.style.animationDuration=(1.6+Math.random()*0.9)+"s";document.body.appendChild(d);(function(el){setTimeout(function(){el.remove();},2700);})(d);}}
 
-function deleteLogro(l){ if(!confirm('¿Borrar el logro "'+l.nombre+'"? (para toda la campaña)'))return; logEvento("🗑 borró logro",l.nombre); var i=LOGROS.indexOf(l);if(i>=0)LOGROS.splice(i,1); render();saveLogros(); }
+function deleteLogro(l){ if(!confirm('¿Borrar el logro "'+l.nombre+'"? (para toda la campaña)'))return; logEvento("🗑 borró logro",l.nombre); var sb=slug(l.nombre); var i=LOGROS.indexOf(l);if(i>=0)LOGROS.splice(i,1); LOGROS.forEach(function(x){ if(x.requiere===sb)delete x.requiere; }); if(progreso[sb]){ delete progreso[sb]; fbProg(sb,null); } render();saveLogros(); }
 function addLogro(){
   var n=(document.getElementById("add-nombre").value||"").trim();
   if(!n){alert("Pon al menos un nombre.");return;}
+  var sn=slug(n);
+  if(!sn){alert("Ese nombre no es válido (queda vacío al normalizar). Usa letras o números.");return;}
+  if(LOGROS.some(function(x){return slug(x.nombre)===sn;})){alert("Ya existe un logro con un nombre equivalente («"+sn+"»). Elige otro distinto.");return;}
   var nuevo={nombre:n,descripcion:(document.getElementById("add-desc").value||"").trim(),recompensa:(document.getElementById("add-recompensa").value||"").trim()};
   if(addIcono)nuevo.icono=addIcono;
   if(state.tab==="grupo"){nuevo.categoria="grupo";}
@@ -1186,7 +1200,7 @@ function renderCadenas(){
 }
 function openCadenas(){ document.getElementById("guia-modal").classList.remove("open"); document.getElementById("cadenas-modal").classList.add("open"); renderCadenas(); }
 function closeCadenas(){ document.getElementById("cadenas-modal").classList.remove("open"); }
-function desencadenar(s){ var l=LOGROS.find(function(x){return slug(x.nombre)===s;}); if(!l||!l.requiere)return; delete l.requiere; logEvento("🔗 soltó cadena",l.nombre); saveLogros(); renderCadenas(); if(editMode)render(); }
+function desencadenar(s){ var l=LOGROS.find(function(x){return slug(x.nombre)===s;}); if(!l||!l.requiere)return; delete l.requiere; logEvento("🔗 soltó cadena",l.nombre); saveLogros(); renderCadenas(); render(); }
 
 // Guía del GM (menú principal): la leen todos, la edita SOLO el Owner
 var guiaGM=null, guiaGMEditing=false;
@@ -1459,7 +1473,17 @@ function buildCard(l){
   if(editMode){
     var chb=div.querySelector(".chainbtn");if(chb)chb.addEventListener("click",function(){clickCadena(l);});
     var ocb=div.querySelector(".ocbtn");if(ocb)ocb.addEventListener("click",function(){l.oculto=!l.oculto;render();saveLogros();});
-    var nm=div.querySelector(".nm-input");if(nm)nm.addEventListener("change",function(){l.nombre=nm.value;render();saveLogros();});
+    var nm=div.querySelector(".nm-input");if(nm)nm.addEventListener("change",function(){
+      var nuevoNombre=(nm.value||"").trim(), viejo=slug(l.nombre), nuevo=slug(nuevoNombre);
+      if(!nuevoNombre||!nuevo){ alert("El nombre no puede quedar vacío."); nm.value=l.nombre; return; }
+      if(nuevo!==viejo && LOGROS.some(function(x){return x!==l && slug(x.nombre)===nuevo;})){ alert("Ya existe un logro con un nombre equivalente. No se renombró."); nm.value=l.nombre; return; }
+      l.nombre=nuevoNombre;
+      if(nuevo!==viejo){
+        if(progreso[viejo]){ progreso[nuevo]=progreso[viejo]; delete progreso[viejo]; fbProg(viejo,null); fbProg(nuevo,progreso[nuevo]); }
+        LOGROS.forEach(function(x){ if(x.requiere===viejo)x.requiere=nuevo; });
+      }
+      render();saveLogros();
+    });
     var ds=div.querySelector(".ds-input");if(ds)ds.addEventListener("change",function(){l.descripcion=ds.value;debounce("l",saveLogros);});
     var ri=div.querySelector(".rw-input");if(ri)ri.addEventListener("input",function(){l.recompensa=ri.value;debounce("l",saveLogros);});
     var di=div.querySelector(".dif-input");if(di)di.addEventListener("change",function(){if(di.value)l.dificultad=di.value;else delete l.dificultad;render();saveLogros();});
@@ -1564,16 +1588,26 @@ function toggleBloqueo(){
     .catch(function(){setStatus("⚠ Error");alert("No se pudo cambiar el estado de la campaña.");});
 }
 // Refresco en vivo: relee solo el progreso de la campaña cada 5 s y repinta si cambió (sin recargar ni molestar).
-var liveTimer=null, liveBusy=false;
-function startLive(){ stopLive(); liveTimer=setInterval(liveTick,5000); }
+var liveTimer=null, liveBusy=false, liveN=0;
+function startLive(){ stopLive(); liveN=0; liveTimer=setInterval(liveTick,5000); }
 function stopLive(){ if(liveTimer){clearInterval(liveTimer);liveTimer=null;} }
 function liveTick(){
   if(!currentCamp||document.hidden||liveBusy||editMode)return;
   if(document.getElementById("app").style.display==="none")return;
-  liveBusy=true;
-  fetch(FB+"/campanas/"+currentCamp+"/progreso.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():undefined;}).then(function(p){
-    liveBusy=false; if(p===undefined)return; p=p||{};
-    if(JSON.stringify(p)!==JSON.stringify(progreso)){ var y=window.scrollY; progreso=p; renderTabs(); renderList(); renderGlobal(); window.scrollTo(0,y); }
+  liveBusy=true; liveN++;
+  var t=new Date().getTime(), full=(liveN%3===1); // cada 3 ticks (~15s) también sincroniza logros e info
+  var jobs=[ fetch(FB+"/campanas/"+currentCamp+"/progreso.json?x="+t).then(function(r){return r.ok?r.json():undefined;}).catch(function(){return undefined;}) ];
+  if(full){
+    jobs.push(fetch(FB+"/campanas/"+currentCamp+"/logros.json?x="+t).then(function(r){return r.ok?r.json():undefined;}).catch(function(){return undefined;}));
+    jobs.push(fetch(FB+"/campanas/"+currentCamp+"/info.json?x="+t).then(function(r){return r.ok?r.json():undefined;}).catch(function(){return undefined;}));
+  }
+  Promise.all(jobs).then(function(a){
+    liveBusy=false;
+    var p=a[0], lg=a[1], inf=a[2], changed=false;
+    if(p!==undefined && JSON.stringify(p||{})!==JSON.stringify(progreso)){ progreso=p||{}; changed=true; }
+    if(full && lg!==undefined){ var arr=toArr(lg); if(JSON.stringify(arr)!==JSON.stringify(LOGROS)){ LOGROS=arr; changed=true; } }
+    if(full && inf!==undefined && inf && JSON.stringify(inf)!==JSON.stringify(campInfo)){ campInfo=inf; GMname=inf.gm||""; MIEMBROS=ordenMiembros(inf.miembros).filter(function(m){return m!==GMname;}); changed=true; }
+    if(changed){ var y=window.scrollY; renderTabs(); renderList(); renderGlobal(); if(document.getElementById("cadenas-modal").classList.contains("open"))renderCadenas(); window.scrollTo(0,y); }
   }).catch(function(){liveBusy=false;});
 }
 
