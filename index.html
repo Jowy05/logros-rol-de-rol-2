@@ -946,7 +946,12 @@ function fbProg(id,val){
   var opt=val?{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(val)}:{method:"DELETE"};
   fetch(url,opt).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});
 }
-function saveLogros(){setStatus("Guardando…");fetch(FB+"/campanas/"+currentCamp+"/logros.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(LOGROS)}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});}
+function saveLogros(){
+  var ver=new Date().getTime(); if(campInfo)campInfo.logrosVer=ver; // marca de versión: el refresco solo recarga /logros si esto cambió
+  setStatus("Guardando…");
+  fetch(FB+"/campanas/"+currentCamp+"/logros.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(LOGROS)}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Sin conexión");});
+  fetch(FB+"/campanas/"+currentCamp+"/info/logrosVer.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(ver)}).catch(function(){});
+}
 function debounce(key,fn){if(saveTimers[key])clearTimeout(saveTimers[key]);saveTimers[key]=setTimeout(fn,700);}
 
 function toggle(l){
@@ -1591,23 +1596,29 @@ function toggleBloqueo(){
 var liveTimer=null, liveBusy=false, liveN=0;
 function startLive(){ stopLive(); liveN=0; liveTimer=setInterval(liveTick,5000); }
 function stopLive(){ if(liveTimer){clearInterval(liveTimer);liveTimer=null;} }
+function repintarLive(changed){ if(!changed)return; var y=window.scrollY; renderTabs(); renderList(); renderGlobal(); if(document.getElementById("cadenas-modal").classList.contains("open"))renderCadenas(); window.scrollTo(0,y); }
 function liveTick(){
   if(!currentCamp||document.hidden||liveBusy||editMode)return;
   if(document.getElementById("app").style.display==="none")return;
   liveBusy=true; liveN++;
-  var t=new Date().getTime(), full=(liveN%3===1); // cada 3 ticks (~15s) también sincroniza logros e info
+  var t=new Date().getTime(), full=(liveN%3===1); // cada 3 ticks (~15s) también mira info (diminuto)
   var jobs=[ fetch(FB+"/campanas/"+currentCamp+"/progreso.json?x="+t).then(function(r){return r.ok?r.json():undefined;}).catch(function(){return undefined;}) ];
-  if(full){
-    jobs.push(fetch(FB+"/campanas/"+currentCamp+"/logros.json?x="+t).then(function(r){return r.ok?r.json():undefined;}).catch(function(){return undefined;}));
-    jobs.push(fetch(FB+"/campanas/"+currentCamp+"/info.json?x="+t).then(function(r){return r.ok?r.json():undefined;}).catch(function(){return undefined;}));
-  }
+  if(full)jobs.push(fetch(FB+"/campanas/"+currentCamp+"/info.json?x="+t).then(function(r){return r.ok?r.json():undefined;}).catch(function(){return undefined;}));
   Promise.all(jobs).then(function(a){
-    liveBusy=false;
-    var p=a[0], lg=a[1], inf=a[2], changed=false;
+    var p=a[0], inf=full?a[1]:undefined, changed=false, bajarLogros=false;
     if(p!==undefined && JSON.stringify(p||{})!==JSON.stringify(progreso)){ progreso=p||{}; changed=true; }
-    if(full && lg!==undefined){ var arr=toArr(lg); if(JSON.stringify(arr)!==JSON.stringify(LOGROS)){ LOGROS=arr; changed=true; } }
-    if(full && inf!==undefined && inf && JSON.stringify(inf)!==JSON.stringify(campInfo)){ campInfo=inf; GMname=inf.gm||""; MIEMBROS=ordenMiembros(inf.miembros).filter(function(m){return m!==GMname;}); changed=true; }
-    if(changed){ var y=window.scrollY; renderTabs(); renderList(); renderGlobal(); if(document.getElementById("cadenas-modal").classList.contains("open"))renderCadenas(); window.scrollTo(0,y); }
+    if(full && inf!==undefined && inf){
+      var verNueva=inf.logrosVer||0, verVieja=(campInfo&&campInfo.logrosVer)||0;
+      if(JSON.stringify(inf)!==JSON.stringify(campInfo)){ campInfo=inf; GMname=inf.gm||""; MIEMBROS=ordenMiembros(inf.miembros).filter(function(m){return m!==GMname;}); changed=true; }
+      if(verNueva!==verVieja)bajarLogros=true; // solo se descarga /logros (pesado) si su versión cambió
+    }
+    if(bajarLogros){
+      fetch(FB+"/campanas/"+currentCamp+"/logros.json?x="+t).then(function(r){return r.ok?r.json():undefined;}).then(function(lg){
+        liveBusy=false;
+        if(lg!==undefined){ var arr=toArr(lg); if(JSON.stringify(arr)!==JSON.stringify(LOGROS)){ LOGROS=arr; changed=true; } }
+        repintarLive(changed);
+      }).catch(function(){ liveBusy=false; repintarLive(changed); });
+    } else { liveBusy=false; repintarLive(changed); }
   }).catch(function(){liveBusy=false;});
 }
 
