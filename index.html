@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>RolCampaingAwardSystem</title>
-<link rel="stylesheet" href="styles.css?v=22">
+<link rel="stylesheet" href="styles.css?v=23">
 </head>
 <body>
 
@@ -39,6 +39,7 @@
     <button class="btn dm" id="crear-camp" style="display:none;">➕ Crear campaña</button>
     <button class="btn dm" id="crear-usuario" style="display:none;">➕ Crear usuario</button>
     <button class="btn dm" id="cuentas-btn" style="display:none;">🗂️ Cuentas</button>
+    <button class="btn" id="minijuegos-btn" style="display:none;">🎮 Minijuegos</button>
   </div>
   <div id="camp-list"></div>
 </div>
@@ -174,6 +175,15 @@
     <div class="modal-body" id="cuentas-body"></div>
   </div>
 </div>
+<div class="modal" id="minijuegos-modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>🎮 Minijuegos</h2>
+      <button class="btn" id="minijuegos-close" type="button">✕ Cerrar</button>
+    </div>
+    <div class="modal-body" id="minijuegos-body"></div>
+  </div>
+</div>
 
 <div class="modal" id="jug-modal">
   <div class="modal-card">
@@ -239,7 +249,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=25; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=26; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -291,6 +301,21 @@ function crearUsuario(after){
 // ====== PANEL DE CUENTAS (solo Owner): ver y modificar todas las cuentas ======
 function openCuentas(){ document.getElementById("cuentas-modal").classList.add("open"); renderCuentas(); }
 function closeCuentas(){ document.getElementById("cuentas-modal").classList.remove("open"); }
+// Minijuegos (sección preparada; los juegos llegarán después).
+function openMinijuegos(){
+  var juegos=[
+    {ic:"✊",n:"Piedra, Papel o Tijera",d:"Reta a otro jugador a un duelo rápido."},
+    {ic:"💪",n:"Pulsos",d:"Echa un pulso a quien se atreva."},
+    {ic:"🥤",n:"¿Dónde está la bola?",d:"Sigue el vaso que esconde la bola."},
+    {ic:"🎲",n:"Más por venir…",d:"Iremos añadiendo más minijuegos visuales."}
+  ];
+  var html='<p style="color:var(--muted);font-size:13px;margin:0 0 12px;">Minijuegos visuales para picaros entre sesiones. ¡Próximamente!</p><div class="mj-grid">';
+  juegos.forEach(function(j){ html+='<div class="mj-card"><div class="mj-ic">'+j.ic+'</div><div class="mj-n">'+esc(j.n)+'</div><div class="mj-d">'+esc(j.d)+'</div><div class="mj-soon">🔒 Próximamente</div></div>'; });
+  html+='</div>';
+  document.getElementById("minijuegos-body").innerHTML=html;
+  document.getElementById("minijuegos-modal").classList.add("open");
+}
+function closeMinijuegos(){ document.getElementById("minijuegos-modal").classList.remove("open"); }
 function renderCuentas(){ loadUsers(function(){ renderDirectorio("cuentas-body", Object.keys(USERS).sort(function(a,b){return a.localeCompare(b);}), esOwner()); }); }
 // Directorio de usuarios: avatar, nombre, nivel y nº de logros; clic -> su perfil. Si admin (Owner), añade rol/🔑/🗑.
 function renderDirectorio(bodyId, users, admin){
@@ -419,12 +444,14 @@ var NOM_CATS=["Mejor acción de la sesión","Peor acción de la sesión","Acció
 // Prestigio: +1 estrella y +500 XP por cada campaña EN LA QUE PARTICIPAS que esté bloqueada (terminada).
 function computarCuenta(camps,user){
   camps=camps||{};
-  var misCamps=[],total=0,xpTotal=0,prestigio=0,premios={},titulos=[];
+  var misCamps=[],total=0,xpTotal=0,prestigio=0,premios={},titulos=[],estrSum=0,estrN=0;
   Object.keys(camps).forEach(function(id){
     var c=camps[id]; if(!c||!c.info)return; var info=c.info;
     // premios (nominaciones): el premio de cada categoría/sesión se lo lleva SOLO quien más votos tiene (empate: todos los líderes). Se cuenta siempre.
     var noms=c.nominaciones||{};
     Object.keys(noms).forEach(function(sid){ var v=noms[sid]&&noms[sid].votos; if(!v)return; Object.keys(v).forEach(function(cat){ var vv=v[cat]||{},tal={},mx=0; Object.keys(vv).forEach(function(voter){var n=vv[voter];if(n){tal[n]=(tal[n]||0)+1;if(tal[n]>mx)mx=tal[n];}}); if(mx>0&&tal[user]===mx)premios[cat]=(premios[cat]||0)+1; }); });
+    // valoración como máster: media de estrellas en las campañas que dirige (info.gm===user)
+    if(info.gm===user){ Object.keys(noms).forEach(function(sid){ var es=noms[sid]&&noms[sid].estrellas; if(es)Object.keys(es).forEach(function(v){ var x=Number(es[v])||0; if(x>=1&&x<=5){estrSum+=x;estrN++;} }); }); }
     var esMiembro=(info.gm===user)||(info.miembros&&info.miembros[user])||(info.gms&&info.gms[user]);
     var logros=toArr(c.logros),prog=c.progreso||{},tiles=[],xpCamp=0,titsCamp=[];
     logros.forEach(function(l){
@@ -447,7 +474,7 @@ function computarCuenta(camps,user){
   if(rolU==="owner"){ var esp={nombre:"Creador del todo",descripcion:"Logro obtenido por forjar este sistema de logros.",dificultad:"Mítica",icono:"👑",categoria:"especial",titulo:"Rey de reyes"}; especiales.push(esp); total+=1; xpTotal+=xpDeRareza(esp.dificultad); titulos.push({t:esp.titulo,r:difKey(esp.dificultad)||"comun"}); }
   if(rolU==="gm"||rolU==="owner"){ var espGM={nombre:"GM",descripcion:"Logro por convertirse en Game Master",dificultad:"Épico",icono:"🎲",categoria:"especial",titulo:"Maestro del Juego"}; especiales.push(espGM); total+=1; xpTotal+=xpDeRareza(espGM.dificultad); titulos.push({t:espGM.titulo,r:difKey(espGM.dificultad)||"comun"}); }
   var titU=[],seenT={}; titulos.forEach(function(x){ if(x&&x.t&&!seenT[x.t]){seenT[x.t]=1;titU.push(x);} });
-  return {misCamps:misCamps,total:total,xpTotal:xpTotal,nivel:nivelDeXP(xpTotal),prestigio:prestigio,premios:premios,especiales:especiales,titulos:titU};
+  return {misCamps:misCamps,total:total,xpTotal:xpTotal,nivel:nivelDeXP(xpTotal),prestigio:prestigio,premios:premios,especiales:especiales,titulos:titU,estrellasMaster:(estrN?{avg:estrSum/estrN,n:estrN}:null)};
 }
 
 function utf8bytes(str){
@@ -577,6 +604,7 @@ function renderPerfil(){
     }
     var pk=Object.keys(cu.premios);
     if(pk.length){ html+='<div class="premios"><h3 class="perfil-h3">🏅 Premios</h3>'; pk.forEach(function(cat){ html+='<span class="premio-chip">'+esc(cat)+' ×'+cu.premios[cat]+'</span>'; }); html+='</div>'; }
+    if(cu.estrellasMaster){ var em=cu.estrellasMaster, fr=Math.round(em.avg), ss=''; for(var z5=1;z5<=5;z5++)ss+=(z5<=fr?'★':'☆'); html+='<div class="master-stars"><h3 class="perfil-h3">⭐ Valoración como máster</h3><div class="ms-row"><span class="ms-stars">'+ss+'</span> <b>'+em.avg.toFixed(1)+'</b>/5 <span style="color:var(--muted)">· '+em.n+' valoración'+(em.n===1?'':'es')+'</span></div></div>'; }
     html+='<div class="perfil-feat" id="perfil-feat"></div>';
     var gi=0;
     if(cu.especiales&&cu.especiales.length){
@@ -802,6 +830,7 @@ function aplicarRolUI(){
   document.getElementById("crear-camp").style.display=puedeCrear()?"inline-block":"none";
   document.getElementById("crear-usuario").style.display=puedeCrear()?"inline-block":"none";
   document.getElementById("cuentas-btn").style.display="inline-block";
+  document.getElementById("minijuegos-btn").style.display="inline-block";
   document.getElementById("camp-actions-bar").style.display="flex";
   document.getElementById("guiagm-fab").textContent=puedeCrear()?"📖 Guía GM":"📖 Ayuda";
 }
@@ -1353,11 +1382,18 @@ function renderNominaciones(){
         var tal=nombres.length?nombres.map(function(n){var w=(tally[n]===mx);return '<span class="nom-vote'+(w?" win":"")+'">'+(w?"🏆 ":"")+esc(n)+' ×'+tally[n]+'</span>';}).join(' '):'<span style="color:var(--muted)">sin votos</span>';
         html+='<div class="nom-cat"><div class="nom-cat-n">'+esc(cat)+'</div><select class="nom-sel" data-sid="'+esc(sid)+'" data-cat="'+esc(cat)+'">'+opts+'</select><div class="nom-lead">'+tal+'</div></div>';
       });
+      var estrM=s.estrellas||{}, miEstr=Number(estrM[currentUser])||0, sumE=0,nE=0;
+      Object.keys(estrM).forEach(function(v){var x=Number(estrM[v])||0; if(x>=1&&x<=5){sumE+=x;nE++;}});
+      var avgE=nE?(sumE/nE):0, puedeVal=(currentUser!==GMname)&&!!(campInfo&&campInfo.miembros&&campInfo.miembros[currentUser]);
+      var st5=''; for(var stI=1;stI<=5;stI++){ st5+='<button class="star'+(stI<=miEstr?" on":"")+'" data-sid="'+esc(sid)+'" data-star="'+stI+'"'+(puedeVal?"":" disabled")+' type="button" title="'+stI+'★">★</button>'; }
+      html+='<div class="nom-cat nom-master"><div class="nom-cat-n">⭐ Valora al máster ('+esc(GMname||"—")+')</div><div class="star-row">'+st5+'</div><div class="nom-lead">'+(nE?('Media: <b>'+avgE.toFixed(1)+'</b>★ · '+nE+' voto'+(nE===1?'':'s')):'<span style="color:var(--muted)">sin valoraciones</span>')+'</div></div>';
       html+='</div></div>';
     });
     body.innerHTML=html;
     var sels=body.querySelectorAll(".nom-sel");
     for(var i=0;i<sels.length;i++){(function(sel){sel.addEventListener("change",function(){votarNom(sel.getAttribute("data-sid"),sel.getAttribute("data-cat"),sel.value);});})(sels[i]);}
+    var stbtns=body.querySelectorAll(".star[data-star]");
+    for(var sb=0;sb<stbtns.length;sb++){(function(b){b.addEventListener("click",function(){valorarMaster(b.getAttribute("data-sid"),parseInt(b.getAttribute("data-star"),10));});})(stbtns[sb]);}
     var sums=body.querySelectorAll(".nom-ses .nom-sum");
     for(var u=0;u<sums.length;u++){(function(sum){sum.addEventListener("click",function(e){ if(e.target.closest&&(e.target.closest(".nom-mini")||e.target.closest(".nom-drag")))return; var ses=sum.parentNode,sid=ses.getAttribute("data-sid"),open=!ses.classList.contains("open"); ses.classList.toggle("open",open); var b2=ses.querySelector(".nom-body2"); if(b2)b2.style.display=open?"":"none"; var ar=sum.querySelector(".nom-arrow"); if(ar)ar.textContent=open?"▾":"▸"; if(!nomOpen)nomOpen={}; nomOpen[sid]=open; });})(sums[u]);}
     if(gm){
@@ -1388,6 +1424,13 @@ function nuevaSesionNom(){
   var titulo=(window.prompt("Nombre de la sesión (p. ej. «Sesión 12»):","Sesión")||"").trim(); if(!titulo)return;
   var ahora=new Date().getTime();
   fetch(FB+"/campanas/"+currentCamp+"/nominaciones/s"+ahora+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({titulo:titulo,fecha:new Date().toISOString(),orden:ahora,votos:{}})}).then(function(){logEvento("🏅 abrió nominaciones",titulo);nomOpen=null;renderNominaciones();}).catch(function(){alert("No se pudo crear la sesión.");});
+}
+function valorarMaster(sid,n){
+  if(!sid||!(n>=1&&n<=5))return;
+  if(currentUser===GMname)return; // el máster no se vota a sí mismo
+  if(!(campInfo&&campInfo.miembros&&campInfo.miembros[currentUser]))return;
+  capturaNomOpen();
+  fetch(FB+"/campanas/"+currentCamp+"/nominaciones/"+sid+"/estrellas/"+encodeURIComponent(currentUser)+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(n)}).then(function(){renderNominaciones();}).catch(function(){});
 }
 function votarNom(sid,cat,nominee){
   if(!sid||!cat)return;
@@ -1763,6 +1806,9 @@ function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reloa
   document.getElementById("cuentas-btn").addEventListener("click",openCuentas);
   document.getElementById("cuentas-close").addEventListener("click",closeCuentas);
   document.getElementById("cuentas-modal").addEventListener("click",function(e){if(e.target.id==="cuentas-modal")closeCuentas();});
+  document.getElementById("minijuegos-btn").addEventListener("click",openMinijuegos);
+  document.getElementById("minijuegos-close").addEventListener("click",closeMinijuegos);
+  document.getElementById("minijuegos-modal").addEventListener("click",function(e){if(e.target.id==="minijuegos-modal")closeMinijuegos();});
   document.getElementById("miembros-foto").addEventListener("click",function(){fotoCampId=miembrosCampId;document.getElementById("foto-input").click();});
   document.getElementById("logro-close").addEventListener("click",closeLogroDetalle);
   document.getElementById("logro-modal").addEventListener("click",function(e){if(e.target.id==="logro-modal")closeLogroDetalle();});
