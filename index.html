@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>RolCampaingAwardSystem</title>
-<link rel="stylesheet" href="styles.css?v=24">
+<link rel="stylesheet" href="styles.css?v=25">
 </head>
 <body>
 
@@ -239,7 +239,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=31; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=32; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -297,15 +297,15 @@ function renderPropuestas(){
   var props=(campInfo&&campInfo.propuestas)||{};
   var gm=esGM(campInfo), bloq=!!(campInfo&&campInfo.bloqueada);
   var puedeProponer=!bloq&&(esMiembroCampana()||gm);
-  var html='<div class="prop-wrap"><p class="prop-intro">💡 Propón logros para la campaña. El GM decide si los aprueba (al aprobar se crean como logro «Para todos», editable luego).</p>';
-  if(puedeProponer)html+='<button class="btn dm" id="prop-add" type="button">➕ Proponer logro</button>';
+  var html='<div class="prop-wrap"><p class="prop-intro">💡 Propón logros para la campaña y elige dónde irían. El GM decide si los aprueba (luego es editable).</p>';
+  if(puedeProponer)html+='<div class="prop-form"><input class="prop-in prop-tit" id="prop-tit" placeholder="Título del logro" maxlength="80"><input class="prop-in prop-desc" id="prop-desc" placeholder="Descripción / objetivo (opcional)" maxlength="240"><select class="prop-in prop-cat" id="prop-cat"><option value="general">📦 Para todos (Individuales)</option><option value="grupo">🛡️ Grupo</option></select><button class="btn dm" id="prop-add" type="button">➕ Proponer</button></div>';
   else if(bloq)html+='<p class="empty" style="padding:6px 0;">La campaña está bloqueada: no se pueden proponer logros.</p>';
   else html+='<p class="empty" style="padding:6px 0;">Solo los miembros de la campaña pueden proponer.</p>';
   var ids=Object.keys(props).sort(function(a,b){var fa=props[a].fecha||"",fb=props[b].fecha||"";return fa<fb?1:(fa>fb?-1:0);});
   html+='<div class="prop-list">';
   if(!ids.length)html+='<div class="empty" style="padding:16px;">No hay propuestas todavía.</div>';
-  ids.forEach(function(pid){ var p=props[pid]||{};
-    html+='<div class="prop-card"><div class="prop-main"><div class="prop-t">'+esc(p.titulo||"(sin título)")+'</div>'+(p.descripcion?('<div class="prop-d">'+esc(p.descripcion)+'</div>'):'')+'<div class="prop-by">✍️ '+esc(p.por||"?")+(p.fecha?(' · '+fmtFecha(p.fecha)):'')+'</div></div>';
+  ids.forEach(function(pid){ var p=props[pid]||{}; var dest=(p.categoria==="grupo")?'🛡️ Grupo':'📦 Para todos';
+    html+='<div class="prop-card"><div class="prop-main"><div class="prop-t">'+esc(p.titulo||"(sin título)")+' <span class="prop-dest">→ '+dest+'</span></div>'+(p.descripcion?('<div class="prop-d">'+esc(p.descripcion)+'</div>'):'')+'<div class="prop-by">✍️ '+esc(p.por||"?")+(p.fecha?(' · '+fmtFecha(p.fecha)):'')+'</div></div>';
     if(gm)html+='<div class="prop-acts"><button class="btn dm prop-ok" data-pid="'+esc(pid)+'" type="button">✅ Aprobar</button><button class="btn prop-no" data-pid="'+esc(pid)+'" type="button">✖ Rechazar</button></div>';
     html+='</div>';
   });
@@ -320,14 +320,16 @@ function renderPropuestas(){
 function proponerLogro(){
   if(campInfo&&campInfo.bloqueada)return;
   if(!(esMiembroCampana()||esGM(campInfo))){alert("Solo los miembros de la campaña pueden proponer.");return;}
-  var t=(window.prompt("Título del logro que propones:","")||"").trim(); if(!t)return;
+  var ti=document.getElementById("prop-tit"), di=document.getElementById("prop-desc"), ci=document.getElementById("prop-cat");
+  var t=((ti&&ti.value)||"").trim(); if(!t){alert("Pon un título para el logro.");if(ti)ti.focus();return;}
   var sn=slug(t);
   if(!sn){alert("Ese título no es válido. Usa letras o números.");return;}
   if(LOGROS.some(function(l){return slug(l.nombre)===sn;})){alert("Ya existe un logro con un nombre equivalente.");return;}
   if(Object.keys(campInfo.propuestas||{}).some(function(k){return slug((campInfo.propuestas[k].titulo)||"")===sn;})){alert("Ya hay una propuesta con un nombre equivalente.");return;}
-  var d=(window.prompt("Descripción / objetivo (opcional):","")||"").trim();
+  var d=((di&&di.value)||"").trim();
+  var cat=(ci&&ci.value==="grupo")?"grupo":"general";
   var pid="p"+(new Date().getTime())+"-"+Math.random().toString(36).slice(2,7);
-  var prop={titulo:t,descripcion:d,por:currentUser,fecha:new Date().toISOString()};
+  var prop={titulo:t,descripcion:d,categoria:cat,por:currentUser,fecha:new Date().toISOString()};
   if(!campInfo.propuestas)campInfo.propuestas={};
   campInfo.propuestas[pid]=prop;
   setStatus("Enviando…");
@@ -340,7 +342,7 @@ function aprobarPropuesta(pid){
   var p=(campInfo.propuestas||{})[pid]; if(!p)return;
   var sn=slug(p.titulo||""); if(!sn){alert("El título de la propuesta no es válido.");return;}
   if(LOGROS.some(function(l){return slug(l.nombre)===sn;})){alert("Ya existe un logro con un nombre equivalente. Rechaza la propuesta o renómbrala.");return;}
-  var nuevo={nombre:p.titulo,descripcion:p.descripcion||"",categoria:"general",propuestoPor:p.por||""};
+  var nuevo={nombre:p.titulo,descripcion:p.descripcion||"",categoria:(p.categoria==="grupo")?"grupo":"general",propuestoPor:p.por||""};
   LOGROS.push(nuevo); render(); // optimista: muestra el logro ya
   saveLogros().then(function(ok){
     if(!ok){ var i=LOGROS.indexOf(nuevo); if(i>=0)LOGROS.splice(i,1); render(); alert("No se pudo guardar el logro; la propuesta sigue pendiente. Inténtalo de nuevo."); return; }
