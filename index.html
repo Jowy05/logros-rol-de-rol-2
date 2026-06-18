@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>RolCampaingAwardSystem</title>
-<link rel="stylesheet" href="styles.css?v=27">
+<link rel="stylesheet" href="styles.css?v=28">
 </head>
 <body>
 
@@ -176,8 +176,10 @@
   </div>
 </div>
 <div class="mj-play" id="mj-play">
-  <button class="mj-play-close" id="mj-play-close" type="button">✕ Cerrar</button>
-  <iframe id="mj-frame" class="mj-frame" src="about:blank" allow="autoplay; fullscreen" title="Minijuego"></iframe>
+  <div class="mj-play-box">
+    <div class="mj-play-head"><span class="mj-play-t" id="mj-play-t">🎮 Minijuego</span><button class="mj-play-close" id="mj-play-close" type="button">✕ Cerrar</button></div>
+    <iframe id="mj-frame" class="mj-frame" src="about:blank" allow="autoplay; fullscreen" title="Minijuego"></iframe>
+  </div>
 </div>
 <div class="modal" id="progreso-modal">
   <div class="modal-card">
@@ -253,7 +255,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=35; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=36; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -398,9 +400,9 @@ function renderMinijuegos(){
   html+='</div></div>';
   var list=document.getElementById("list"); list.innerHTML=html;
   var cards=list.querySelectorAll(".mj-card.play");
-  for(var k=0;k<cards.length;k++){(function(el){var i=parseInt(el.getAttribute("data-i"),10);el.addEventListener("click",function(){abrirMinijuego(juegos[i].url);});})(cards[k]);}
+  for(var k=0;k<cards.length;k++){(function(el){var i=parseInt(el.getAttribute("data-i"),10);el.addEventListener("click",function(){abrirMinijuego(juegos[i].url,juegos[i].ic+" "+juegos[i].n);});})(cards[k]);}
 }
-function abrirMinijuego(url){ if(!url)return; var f=document.getElementById("mj-frame"); f.src=url; document.getElementById("mj-play").classList.add("open"); }
+function abrirMinijuego(url,nombre){ if(!url)return; var f=document.getElementById("mj-frame"); f.src=url; var t=document.getElementById("mj-play-t"); if(t)t.textContent=nombre||"🎮 Minijuego"; document.getElementById("mj-play").classList.add("open"); }
 function cerrarMinijuego(){ document.getElementById("mj-play").classList.remove("open"); var f=document.getElementById("mj-frame"); if(f)f.src="about:blank"; }
 function renderCuentas(){ loadUsers(function(){ renderDirectorio("cuentas-body", Object.keys(USERS).sort(function(a,b){return a.localeCompare(b);}), esOwner()); }); }
 // Directorio de usuarios: avatar, nombre, nivel y nº de logros; clic -> su perfil. Si admin (Owner), añade rol/🔑/🗑.
@@ -1942,6 +1944,7 @@ function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reloa
   document.getElementById("cuentas-close").addEventListener("click",closeCuentas);
   document.getElementById("cuentas-modal").addEventListener("click",function(e){if(e.target.id==="cuentas-modal")closeCuentas();});
   document.getElementById("mj-play-close").addEventListener("click",cerrarMinijuego);
+  document.getElementById("mj-play").addEventListener("click",function(e){if(e.target.id==="mj-play")cerrarMinijuego();});
   document.getElementById("progreso-btn").addEventListener("click",openProgreso);
   document.getElementById("progreso-close").addEventListener("click",closeProgreso);
   document.getElementById("progreso-modal").addEventListener("click",function(e){if(e.target.id==="progreso-modal")closeProgreso();});
