@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>RolCampaingAwardSystem</title>
-<link rel="stylesheet" href="styles.css?v=31">
+<link rel="stylesheet" href="styles.css?v=32">
 </head>
 <body>
 
@@ -277,7 +277,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=46; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=47; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -2114,10 +2114,17 @@ function renderDueloRoom(body,did,d){
     }
   } else if(d.estado==="jugando"){
     var pos=Math.max(-3,Math.min(3,Math.floor(Number(d.pos)||0)));
-    var prev=(duelLastPos[did]===undefined)?pos:Math.max(-3,Math.min(3,duelLastPos[did])), angO=(prev/3*20);
+    var prev=(duelLastPos[did]===undefined)?pos:Math.max(-3,Math.min(3,duelLastPos[did]));
+    // El punto de unión (los puños) se desplaza hacia el bando que PIERDE; su brazo se encoge (scaleX) y el ganador se estira.
+    var TR=function(p){ var cx=160+(p/3*94); return {g:((cx-46)/114).toFixed(3), r:((274-cx)/114).toFixed(3), dx:(cx-160).toFixed(1)}; };
+    var o=TR(prev);
     var winCls=(pos>=3)?" win-v":((pos<=-3)?" win-r":"");
-    html+='<div class="pulso'+winCls+'"><svg viewBox="0 0 320 168" class="pl-svg"><rect x="8" y="138" width="304" height="16" rx="5" class="pl-table"></rect>';
-    html+='<g class="pl-arms" style="transform:rotate('+angO+'deg)"><ellipse cx="46" cy="136" rx="21" ry="9" class="pl-elbow v"></ellipse><ellipse cx="274" cy="136" rx="21" ry="9" class="pl-elbow r"></ellipse><path d="M46 132 Q 102 96 158 92" class="pl-arm v"></path><path d="M274 132 Q 218 96 162 92" class="pl-arm r"></path><circle cx="151" cy="90" r="15" class="pl-fist v"></circle><circle cx="169" cy="90" r="15" class="pl-fist r"></circle></g></svg>';
+    html+='<div class="pulso'+winCls+'"><svg viewBox="0 0 320 150" class="pl-svg"><rect x="8" y="132" width="304" height="14" rx="5" class="pl-table"></rect>';
+    html+='<ellipse cx="46" cy="128" rx="20" ry="9" class="pl-elbow v"></ellipse><ellipse cx="274" cy="128" rx="20" ry="9" class="pl-elbow r"></ellipse>';
+    html+='<path class="pl-arm v" d="M46 126 Q 102 96 160 92" style="transform:scaleX('+o.g+')"></path>';
+    html+='<path class="pl-arm r" d="M274 126 Q 218 96 160 92" style="transform:scaleX('+o.r+')"></path>';
+    html+='<g class="pl-fists" style="transform:translateX('+o.dx+'px)"><circle cx="151" cy="90" r="15" class="pl-fist v"></circle><circle cx="169" cy="90" r="15" class="pl-fist r"></circle></g>';
+    html+='</svg>';
     html+='<div class="tug-pos">'+(pos>0?("🟢 Verde domina por "+pos):(pos<0?("🔴 Rojo domina por "+(-pos)):"En tensión (0)"))+' · ¡primero a 3 gana!</div>';
     if(puede)html+='<div class="tug-btns"><button class="tug-b v" data-lado="verde" type="button">💪 +1 Verde</button><button class="tug-b r" data-lado="rojo" type="button">+1 Rojo 💪</button></div>';
     html+='</div>';
@@ -2143,7 +2150,10 @@ function renderDueloRoom(body,did,d){
   var nrf=body.querySelector("#npc-rojo"); if(nrf)nrf.addEventListener("change",function(){setNpcDuelo(did,"rojo",nrf.value);});
   var emp=body.querySelector(".duelo-empezar"); if(emp)emp.addEventListener("click",function(){empezarPulso(did);});
   var tb=body.querySelectorAll(".tug-b"); for(var j=0;j<tb.length;j++){(function(b){b.addEventListener("click",function(){empujarPulso(did,b.getAttribute("data-lado"));});})(tb[j]);}
-  var arms=body.querySelector(".pl-arms"); if(arms){ var _p=Math.max(-3,Math.min(3,Math.floor(Number(d.pos)||0))); requestAnimationFrame(function(){ arms.style.transform="rotate("+(_p/3*20)+"deg)"; }); duelLastPos[did]=_p; }
+  var pv=body.querySelector(".pl-arm.v"), pr=body.querySelector(".pl-arm.r"), pf=body.querySelector(".pl-fists");
+  if(pv&&pr&&pf){ var _p=Math.max(-3,Math.min(3,Math.floor(Number(d.pos)||0))), _cx=160+(_p/3*94);
+    requestAnimationFrame(function(){ pv.style.transform="scaleX("+((_cx-46)/114).toFixed(3)+")"; pr.style.transform="scaleX("+((274-_cx)/114).toFixed(3)+")"; pf.style.transform="translateX("+(_cx-160).toFixed(1)+"px)"; });
+    duelLastPos[did]=_p; }
   var cl=body.querySelector(".duelo-cancel"); if(cl)cl.addEventListener("click",function(){cancelarDuelo(did);});
   var qt=body.querySelector(".duelo-quitar"); if(qt)qt.addEventListener("click",function(){quitarDuelo(did);});
   if(d.estado==="jugando"&&esHost&&Math.abs(Number(d.pos)||0)>=3&&!duelAutoArmed[did]&&!duelResolving[did]){ duelAutoArmed[did]=true; setTimeout(function(){ duelAutoArmed[did]=false; resolverApuestas(did); },350); }
