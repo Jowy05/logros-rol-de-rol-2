@@ -277,7 +277,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=43; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=44; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -336,9 +336,9 @@ function openProgreso(){
   var t=new Date().getTime();
   Promise.all([
     fetch(FB+"/campanas.json?x="+t).then(function(r){return r.ok?r.json():{};}).catch(function(){return {};}),
-    fetch(FB+"/perfiles/"+encodeURIComponent(currentUser)+"/bonusXP.json?x="+t).then(function(r){return r.ok?r.json():0;}).catch(function(){return 0;})
+    fetch(FB+"/perfiles/"+encodeURIComponent(currentUser)+".json?x="+t).then(function(r){return r.ok?r.json():{};}).catch(function(){return {};})
   ]).then(function(a){
-    var cu=computarCuenta(a[0]||{},currentUser,a[1]), apps=logrosApp(cu), n=apps.filter(function(x){return x.on;}).length;
+    var pf=a[1]||{}, cu=computarCuenta(a[0]||{},currentUser,pf.bonusXP,pf.apuestas), apps=logrosApp(cu), n=apps.filter(function(x){return x.on;}).length;
     body.innerHTML='<p class="prop-intro">Insignias que desbloqueas jugando. Llevas <b>'+n+' / '+apps.length+'</b>.</p>'+appachGrid(apps);
   }).catch(function(){body.innerHTML="No se pudo cargar.";});
 }
@@ -446,7 +446,7 @@ function renderDirectorio(bodyId, users, admin){
     var camps=a[0]||{}, perfiles=a[1]||{};
     var html='<div class="dir-list">';
     users.forEach(function(u){
-      var pf=perfiles[u]||{}, cu=computarCuenta(camps,u,pf.bonusXP), foto=(typeof pf.foto==="string")?pf.foto:null, eqt=(pf.titulo&&pf.titulo.t)?pf.titulo:null;
+      var pf=perfiles[u]||{}, cu=computarCuenta(camps,u,pf.bonusXP,pf.apuestas), foto=(typeof pf.foto==="string")?pf.foto:null, eqt=(pf.titulo&&pf.titulo.t)?pf.titulo:null;
       var avc=marcoNivel(cu.nivel.lvl), avcls=avc?(" mn-"+avc):"", yo=(u===currentUser);
       var av=foto?('<img class="avatar-sm'+avcls+'" src="'+foto+'" alt="">'):('<span class="avatar-ini'+avcls+'">'+esc(u.charAt(0).toUpperCase())+'</span>');
       html+='<div class="dir-row"><div class="dir-main" data-user="'+esc(u)+'" title="Ver perfil">'+av+'<div class="dir-tx"><div class="dir-name">'+esc(u)+' <span class="rol-badge rol-'+rolDe(u)+'">'+rolDe(u)+'</span></div>'+(eqt?('<div class="dir-titulo titulo r-'+(eqt.r||"comun")+'">🏷️ '+esc(eqt.t)+'</div>'):'')+'<div class="dir-sub">Nivel '+cu.nivel.lvl+' · '+cu.total+' logros'+(cu.prestigio?(' · '+cu.prestigio+'⭐'):'')+'</div></div></div>';
@@ -560,8 +560,9 @@ var NOM_CATS=["Mejor acción de la sesión","Peor acción de la sesión","Acció
 // Resumen de cuenta de un usuario a partir de TODAS las campañas: XP, nivel, prestigio, premios y logros.
 // XP (todos x1, sin multiplicadores): GRUPO cuenta para TODO el grupo (miembros + GM); logros de GM (categoria "gm") solo para el GM creador; individuales para su personaje; "para todos" para quien lo marcó.
 // Prestigio: +1 estrella y +500 XP por cada campaña EN LA QUE PARTICIPAS que esté bloqueada (terminada).
-function computarCuenta(camps,user,bonusXP){
-  camps=camps||{};
+function computarCuenta(camps,user,bonusXP,apStats){
+  camps=camps||{}; apStats=apStats||{};
+  var _apG=Math.floor(Number(apStats.ganadas)||0), _apR=Math.floor(Number(apStats.mejorRacha)||0);
   var misCamps=[],total=0,xpTotal=0,prestigio=0,premios={},titulos=[],estrSum=0,estrN=0,rar={comun:0,raro:0,epico:0,legendario:0,mitica:0},mejorPct=0,camps80=0,camps100=0;
   Object.keys(camps).forEach(function(id){
     var c=camps[id]; if(!c||!c.info)return; var info=c.info;
@@ -598,10 +599,10 @@ function computarCuenta(camps,user,bonusXP){
   if(rolU==="gm"||rolU==="owner"){ var espGM={nombre:"GM",descripcion:"Logro por convertirse en Game Master",dificultad:"Épico",icono:"🎲",categoria:"especial",titulo:"Maestro del Juego"}; especiales.push(espGM); total+=1; xpTotal+=xpDeRareza(espGM.dificultad); titulos.push({t:espGM.titulo,r:difKey(espGM.dificultad)||"comun"}); }
   xpTotal+=(Number(bonusXP)||0); // bono fijo (p. ej. +10 por aniversario), guardado en /perfiles/{u}/bonusXP
   // los logros TOP de "Progreso del Aventurero" que llevan título lo otorgan a la cuenta
-  var cuTmp={total:total,nivel:nivelDeXP(xpTotal),prestigio:prestigio,rar:rar,mejorPct:mejorPct,camps80:camps80,camps100:camps100,premios:premios,misCamps:misCamps,titulos:titulos,estrellasMaster:(estrN?{avg:estrSum/estrN,n:estrN}:null)};
+  var cuTmp={total:total,nivel:nivelDeXP(xpTotal),prestigio:prestigio,rar:rar,mejorPct:mejorPct,camps80:camps80,camps100:camps100,premios:premios,misCamps:misCamps,titulos:titulos,estrellasMaster:(estrN?{avg:estrSum/estrN,n:estrN}:null),apuestasGanadas:_apG,mejorRachaApuestas:_apR};
   if(typeof LOGROS_APP!=="undefined")LOGROS_APP.forEach(function(a){ if(a.titulo){ try{ if(a.cond(cuTmp))titulos.push({t:a.titulo,r:a.dif}); }catch(e){} } });
   var titU=[],seenT={}; titulos.forEach(function(x){ if(x&&x.t&&!seenT[x.t]){seenT[x.t]=1;titU.push(x);} });
-  return {misCamps:misCamps,total:total,xpTotal:xpTotal,nivel:nivelDeXP(xpTotal),prestigio:prestigio,premios:premios,especiales:especiales,titulos:titU,estrellasMaster:(estrN?{avg:estrSum/estrN,n:estrN}:null),rar:rar,mejorPct:mejorPct,camps80:camps80,camps100:camps100};
+  return {misCamps:misCamps,total:total,xpTotal:xpTotal,nivel:nivelDeXP(xpTotal),prestigio:prestigio,premios:premios,especiales:especiales,titulos:titU,estrellasMaster:(estrN?{avg:estrSum/estrN,n:estrN}:null),rar:rar,mejorPct:mejorPct,camps80:camps80,camps100:camps100,apuestasGanadas:_apG,mejorRachaApuestas:_apR};
 }
 
 // Logros GENERALES de la app: insignias de cuenta automáticas (derivadas de computarCuenta; NO dan XP, para no crear bucles).
@@ -635,7 +636,27 @@ var LOGROS_APP=[
   {id:"prem1",nombre:"Nominado de honor",desc:"Gana tu primer premio de nominaciones",icono:"🏅",dif:"raro",cond:function(c){var p=c.premios||{},s=0;for(var k in p)s+=p[k];return s>=1;}},
   {id:"prem5",nombre:"Ídolo del grupo",desc:"Gana 5 premios de nominaciones",icono:"🎖️",dif:"epico",cond:function(c){var p=c.premios||{},s=0;for(var k in p)s+=p[k];return s>=5;}},
   {id:"tit3",nombre:"Portador de títulos",desc:"Ten 3 títulos disponibles",icono:"🏷️",dif:"epico",cond:function(c){return (c.titulos||[]).length>=3;}},
-  {id:"master5",nombre:"Máster de 5 estrellas",desc:"Media de 4,5★ o más (mín. 10 votos) como máster",icono:"🌠",dif:"legendario",cond:function(c){return !!(c.estrellasMaster&&c.estrellasMaster.n>=10&&c.estrellasMaster.avg>=4.5);}}
+  {id:"master5",nombre:"Máster de 5 estrellas",desc:"Media de 4,5★ o más (mín. 10 votos) como máster",icono:"🌠",dif:"legendario",cond:function(c){return !!(c.estrellasMaster&&c.estrellasMaster.n>=10&&c.estrellasMaster.avg>=4.5);}},
+  // ---- Apuestas ganadas (mesa de apuestas verde/rojo) ----
+  {id:"ap1",nombre:"Apostador novato",desc:"Gana tu primera apuesta",icono:"🪙",dif:"comun",cond:function(c){return (c.apuestasGanadas||0)>=1;}},
+  {id:"ap5",nombre:"Con suerte",desc:"Gana 5 apuestas",icono:"🎲",dif:"comun",cond:function(c){return (c.apuestasGanadas||0)>=5;}},
+  {id:"ap10",nombre:"Tahúr",desc:"Gana 10 apuestas",icono:"🃏",dif:"raro",cond:function(c){return (c.apuestasGanadas||0)>=10;}},
+  {id:"ap25",nombre:"Jugador de ventaja",desc:"Gana 25 apuestas",icono:"💰",dif:"raro",cond:function(c){return (c.apuestasGanadas||0)>=25;}},
+  {id:"ap50",nombre:"Tiburón de las apuestas",desc:"Gana 50 apuestas",icono:"🦈",dif:"epico",cond:function(c){return (c.apuestasGanadas||0)>=50;}},
+  {id:"ap100",nombre:"La banca gana",desc:"Gana 100 apuestas",icono:"🏦",dif:"epico",cond:function(c){return (c.apuestasGanadas||0)>=100;}},
+  {id:"ap150",nombre:"Golpe de fortuna",desc:"Gana 150 apuestas",icono:"💸",dif:"legendario",cond:function(c){return (c.apuestasGanadas||0)>=150;}},
+  {id:"ap200",nombre:"Manos de oro",desc:"Gana 200 apuestas",icono:"🤑",dif:"legendario",cond:function(c){return (c.apuestasGanadas||0)>=200;}},
+  {id:"ap250",nombre:"Rey del casino",desc:"Gana 250 apuestas",icono:"👑",dif:"legendario",cond:function(c){return (c.apuestasGanadas||0)>=250;}},
+  {id:"ap300",nombre:"Imparable en la mesa",desc:"Gana 300 apuestas",icono:"🚀",dif:"mitica",cond:function(c){return (c.apuestasGanadas||0)>=300;}},
+  {id:"ap400",nombre:"Leyenda del tapete",desc:"Gana 400 apuestas",icono:"🎴",dif:"mitica",cond:function(c){return (c.apuestasGanadas||0)>=400;}},
+  {id:"ap500",nombre:"Amo de la fortuna",desc:"Gana 500 apuestas",icono:"🎰",dif:"mitica",cond:function(c){return (c.apuestasGanadas||0)>=500;}},
+  // ---- Rachas (apuestas ganadas SEGUIDAS) ----
+  {id:"apr2",nombre:"Dos seguidas",desc:"Gana 2 apuestas seguidas",icono:"✌️",dif:"comun",cond:function(c){return (c.mejorRachaApuestas||0)>=2;}},
+  {id:"apr5",nombre:"En racha",desc:"Gana 5 apuestas seguidas",icono:"🔥",dif:"raro",cond:function(c){return (c.mejorRachaApuestas||0)>=5;}},
+  {id:"apr10",nombre:"Racha imparable",desc:"Gana 10 apuestas seguidas",icono:"⚡",dif:"epico",cond:function(c){return (c.mejorRachaApuestas||0)>=10;}},
+  {id:"apr25",nombre:"Racha legendaria",desc:"Gana 25 apuestas seguidas",icono:"🌟",dif:"legendario",cond:function(c){return (c.mejorRachaApuestas||0)>=25;}},
+  {id:"apr50",nombre:"Racha mítica",desc:"Gana 50 apuestas seguidas",icono:"☄️",dif:"mitica",cond:function(c){return (c.mejorRachaApuestas||0)>=50;}},
+  {id:"apr100",nombre:"Suerte infinita",desc:"Gana 100 apuestas seguidas",icono:"♾️",dif:"mitica",cond:function(c){return (c.mejorRachaApuestas||0)>=100;}}
 ];
 function logrosApp(cu){ return LOGROS_APP.map(function(a){ var on=false; try{on=!!a.cond(cu);}catch(e){} return {a:a,on:on}; }); }
 function appachGrid(apps){ var html='<div class="appach-grid">'; apps.forEach(function(x){ var a=x.a; html+='<div class="appach'+(x.on?" on":"")+'" title="'+esc(a.desc)+'"><div class="appach-ic'+(x.on?(" r-"+difKey(a.dif)):"")+'">'+(x.on?a.icono:"🔒")+'</div><div class="appach-tx"><div class="appach-n">'+esc(a.nombre)+'</div><div class="appach-d">'+esc(a.desc)+'</div></div></div>'; }); html+='</div>'; return html; }
@@ -709,7 +730,7 @@ function loadMiPerfil(cb){
     miPerfilFoto=(typeof pf.foto==="string")?pf.foto:null;
     miVitrina=Array.isArray(pf.vitrina)?pf.vitrina:[];
     miTitulo=(pf.titulo&&pf.titulo.t)?pf.titulo:null;
-    miNivelCuenta=computarCuenta(a[1]||{},currentUser,pf.bonusXP).nivel.lvl;
+    miNivelCuenta=computarCuenta(a[1]||{},currentUser,pf.bonusXP,pf.apuestas).nivel.lvl;
     if(!pf.creado){ pf.creado=new Date(t).toISOString(); fetch(FB+"/perfiles/"+encodeURIComponent(currentUser)+"/creado.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(pf.creado)}).catch(function(){}); }
     if(cb)cb();
   });
@@ -751,7 +772,7 @@ function renderPerfil(){
     var vitrina=Array.isArray(perf.vitrina)?perf.vitrina:[];
     var recuerdos=perf.recuerdos||{};
     if(propio){ miPerfilFoto=foto; miVitrina=vitrina; }
-    var cu=computarCuenta(camps,user,perf.bonusXP), nv=cu.nivel, pctxp=nv.need?Math.round(nv.en/nv.need*100):0;
+    var cu=computarCuenta(camps,user,perf.bonusXP,perf.apuestas), nv=cu.nivel, pctxp=nv.need?Math.round(nv.en/nv.need*100):0;
     var mc=marcoNivel(nv.lvl), avcls=mc?(" mn-"+mc):"";
     if(propio)miNivelCuenta=nv.lvl;
     var eqTit=(perf.titulo&&perf.titulo.t)?perf.titulo:null;
@@ -2196,6 +2217,21 @@ function empujarPulso(did,lado){
     fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(np)}).then(function(){ duelosTick(); }).catch(function(){});
   }).catch(function(){});
 }
+// Registra en cada apostador (jugador) su victoria/derrota y la racha, para los logros de "Progreso del Aventurero".
+// Se llama UNA vez al cerrar (no en la recuperación de pago). Ganar: ganadas++ y racha++; perder: racha=0. (Devolución no cuenta.)
+function aplicarStatsApuestas(d){
+  var ap=d.apuestas||{}, win=d.ganador;
+  Object.keys(ap).forEach(function(u){
+    var gano=(ap[u].lado===win), url=FB+"/perfiles/"+encodeURIComponent(u)+"/apuestas.json";
+    fetch(url+"?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(s){
+      s=s||{}; var ganadas=Math.floor(Number(s.ganadas)||0), racha=Math.floor(Number(s.racha)||0), mejor=Math.floor(Number(s.mejorRacha)||0);
+      if(gano){ ganadas++; racha++; if(racha>mejor)mejor=racha; } else { racha=0; }
+      var nuevo={ganadas:ganadas,racha:racha,mejorRacha:mejor};
+      fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(nuevo)}).catch(function(){});
+      if(u===currentUser&&miProfileRaw)miProfileRaw.apuestas=nuevo;
+    }).catch(function(){});
+  });
+}
 // Resolver al llegar el pulso a ±3. Solo el anfitrión (un único escritor). Parimutuel proporcional; NPC = dinero virtual.
 function resolverApuestas(did){
   if(duelResolving[did])return; duelResolving[did]=true; // candado SÍNCRONO: no doble pago
@@ -2215,7 +2251,7 @@ function resolverApuestas(did){
     var losingPool=duelPoolLado(d,lose), winStakeTotal=duelPoolLado(d,win), pagos={};
     winners.forEach(function(u){ var stake=Math.floor(Number(ap[u].monto)||0); pagos[u]=(winStakeTotal>0)?Math.floor(losingPool*stake/winStakeTotal):0; });
     d.estado="cerrado"; d.ganador=win; d.pagado=false; d.pagos=pagos; d.pagadoA={};
-    fetch(FB+"/campanas/"+currentCamp+"/info/duelos/"+did+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)}).then(function(r2){ if(!r2.ok){duelResolving[did]=false;return;} DUELOS[did]=d; creditarApuestas(did,d); }).catch(function(){duelResolving[did]=false;});
+    fetch(FB+"/campanas/"+currentCamp+"/info/duelos/"+did+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)}).then(function(r2){ if(!r2.ok){duelResolving[did]=false;return;} DUELOS[did]=d; aplicarStatsApuestas(d); creditarApuestas(did,d); }).catch(function(){duelResolving[did]=false;});
   }).catch(function(){ duelResolving[did]=false; });
 }
 // Acredita a cada ganador su apuesta (recuperada) + su parte del bote perdedor. Idempotente vía pagadoA por usuario.
