@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>RolCampaingAwardSystem</title>
-<link rel="stylesheet" href="styles.css?v=42">
+<link rel="stylesheet" href="styles.css?v=43">
 </head>
 <body>
 
@@ -82,7 +82,7 @@
     <label class="ck" id="editwrap" style="display:none;"><input type="checkbox" id="t-edit"> ✏️ Modo edición</label>
     <button class="btn dm" id="resumenbtn" style="display:none;">📊 Resumen</button>
     <button class="btn dm" id="lockbtn" style="display:none;">🔒 Bloquear</button>
-    <span id="savestatus" style="font-size:12px;color:#9fd3a0;min-width:74px;"></span>
+    <span id="savestatus" aria-live="polite"></span>
   </div>
 
   <div class="lockbar" id="lockbar" style="display:none;">🔒 <b>Campaña bloqueada</b> — solo lectura. Nadie marca ni edita; solo el GM creador y el Owner pueden entrar.</div>
@@ -291,7 +291,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=58; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=59; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -507,6 +507,7 @@ function borrarCuenta(u){
 }
 
 let currentUser="", currentCamp=null, campInfo=null, MIEMBROS=[], GMname="";
+var INVCOLAPSO={}, INVTOUCH=(("ontouchstart" in window)||(navigator.maxTouchPoints>0)), invDrag=null; // contenedores plegados (por sec|cid), detección táctil (sin DnD), id de objeto arrastrándose
 let LOGROS=[], progreso={}, guiaMD=null, editMode=false;
 var INV={};
 var guiaEditing=false, dragSrc=null, saveTimers={}, chainSource=null, miVitrina=[], pendingPjIcon=null, fotoCampId=null, pendingItemImg=null;
@@ -710,7 +711,7 @@ function sha256hex(str){
 }
 
 function toArr(v){ if(Array.isArray(v))return v; if(v&&typeof v==="object")return Object.keys(v).map(function(k){return v[k];}); return []; }
-function setStatus(t){var s=document.getElementById("savestatus");if(s)s.textContent=t;}
+function setStatus(t){ var s=document.getElementById("savestatus"); if(!s)return; t=t||""; s.textContent=t; var st=(t.indexOf("✓")>=0)?"ok":((t.indexOf("⚠")>=0||/conexi/i.test(t))?"err":((/…|Guardando|Cargando|Refrescando|Abriendo|Guardar/i.test(t))?"saving":"")); s.classList.remove("ss-saving","ss-ok","ss-err"); if(st){ void s.offsetWidth; s.classList.add("ss-"+st); } }
 // Auto-actualización: si /appver en Firebase es mayor que APP_VER, recarga con ?v= para saltarse la caché. Guarda contra bucles.
 function checkVersion(){
   fetch(FB+"/appver.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(v){
@@ -1914,7 +1915,7 @@ function delItemInv(sec,id){ if(!puedeEditarInv(sec))return; var d=invData(sec);
 // ---- Contenedores (mochila, cofre…) dentro de una sección de inventario ----
 function crearContenedor(sec){ if(!puedeEditarInv(sec))return; var n=(window.prompt("Nombre del contenedor (p. ej. Mochila, Cofre):","")||"").trim(); if(!n)return; var pm=window.prompt("Peso máximo que soporta en kg (deja vacío = sin límite):",""); if(pm===null)return; var max=Math.max(0,Number(pm)||0); var cid="c"+(new Date().getTime())+Math.floor(Math.random()*1000), c={nombre:n,pesoMax:max}; invData(sec).contenedores[cid]=c; setStatus("Guardando…"); fetch(FB+"/campanas/"+currentCamp+"/inventario/"+encodeURIComponent(sec)+"/contenedores/"+cid+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){setStatus("⚠ Error");}); render(); }
 function editContenedor(sec,cid,campo,val){ if(!puedeEditarInv(sec))return; var c=invData(sec).contenedores[cid]; if(!c)return; if(campo==="nombre")c.nombre=(val||"").trim(); else c.pesoMax=Math.max(0,Number(val)||0); fetch(FB+"/campanas/"+currentCamp+"/inventario/"+encodeURIComponent(sec)+"/contenedores/"+encodeURIComponent(cid)+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");}).catch(function(){}); render(); }
-function delContenedor(sec,cid){ if(!puedeEditarInv(sec))return; if(!confirm("¿Borrar este contenedor? Sus objetos quedarán sueltos (no se borran)."))return; var d=invData(sec); Object.keys(d.items||{}).forEach(function(id){ if(d.items[id].cont===cid){ delete d.items[id].cont; saveItemFB(sec,id); } }); delete d.contenedores[cid]; fetch(FB+"/campanas/"+currentCamp+"/inventario/"+encodeURIComponent(sec)+"/contenedores/"+encodeURIComponent(cid)+".json",{method:"DELETE"}).then(function(){render();}).catch(function(){}); }
+function delContenedor(sec,cid){ if(!puedeEditarInv(sec))return; if(!confirm("¿Borrar este contenedor? Sus objetos quedarán sueltos (no se borran)."))return; delete INVCOLAPSO[sec+"|"+cid]; var d=invData(sec); Object.keys(d.items||{}).forEach(function(id){ if(d.items[id].cont===cid){ delete d.items[id].cont; saveItemFB(sec,id); } }); delete d.contenedores[cid]; fetch(FB+"/campanas/"+currentCamp+"/inventario/"+encodeURIComponent(sec)+"/contenedores/"+encodeURIComponent(cid)+".json",{method:"DELETE"}).then(function(){render();}).catch(function(){}); }
 function setItemCont(sec,id,cid){ if(!puedeEditarInv(sec))return; var it=invData(sec).items[id]; if(!it)return; if(cid&&invData(sec).contenedores[cid])it.cont=cid; else delete it.cont; saveItemFB(sec,id); render(); }
 // Carga máxima (lb) de la sección: para calcular carga ligera/media/pesada/sobrecarga (PF1e: ≤1/3 ligera, ≤2/3 media, ≤max pesada, >max sobrecarga).
 function setCargaMax(sec,val){ if(!puedeEditarInv(sec))return; var v=Math.max(0,Math.floor(Number(val)||0)); invData(sec).cargaMax=v; fetch(FB+"/campanas/"+currentCamp+"/inventario/"+encodeURIComponent(sec)+"/cargaMax.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");render();}).catch(function(){setStatus("⚠ Sin conexión");}); }
@@ -1968,7 +1969,7 @@ function renderInventario(){
   if(puede)html+='<div class="addbox inv-add"><input class="an" id="inv-nom" placeholder="Objeto"><input class="ar" id="inv-cant" type="number" min="1" value="1" title="Cantidad"><input class="ar" id="inv-peso" type="number" min="0" step="0.1" placeholder="Peso (kg)" title="Peso por unidad (kg)">'+(hayConts?('<select class="ar" id="inv-cont"><option value="">— suelto —</option>'+Object.keys(conts).map(function(cid){return '<option value="'+esc(cid)+'">'+esc(conts[cid].nombre||"Cont.")+'</option>';}).join('')+'</select>'):'')+'<button class="btn dm" id="inv-add-btn" type="button">➕ Añadir</button></div>';
   function contOpts(sel){ var o='<option value="">— suelto —</option>'; Object.keys(conts).forEach(function(cid){ o+='<option value="'+esc(cid)+'"'+((sel===cid)?" selected":"")+'>'+esc(conts[cid].nombre||"Cont.")+'</option>'; }); return o; }
   function itemRow(id){ var it=items[id]||{}, cant=Number(it.cantidad)||1, peso=Number(it.peso)||0; itemsW+=cant*peso; var thumb=it.img?('<img src="'+it.img+'" alt="">'):'📦';
-    if(puede)return '<div class="inv-row" data-id="'+esc(id)+'"><button class="inv-img" data-id="'+esc(id)+'" type="button" title="Imagen del objeto">'+thumb+'</button><input class="inv-nom-in" value="'+esc(it.nombre||"")+'" placeholder="Objeto"><input class="inv-cant-in" type="number" min="1" value="'+cant+'" title="Cantidad"><input class="inv-peso-in" type="number" min="0" step="0.1" value="'+peso+'" title="Peso por unidad (kg)"><span class="inv-sub">'+(peso?((cant*peso).toFixed(1)+" kg"):"—")+'</span>'+(hayConts?('<select class="item-cont" data-id="'+esc(id)+'" title="Contenedor">'+contOpts(it.cont)+'</select>'):'')+(dests.length?('<button class="inv-trasp" data-id="'+esc(id)+'" type="button" title="Traspasar al destino seleccionado">↔</button>'):'')+'<button class="inv-del" data-id="'+esc(id)+'" type="button">🗑</button></div>';
+    if(puede)return '<div class="inv-row" data-id="'+esc(id)+'"'+((hayConts&&!INVTOUCH)?' draggable="true"':'')+'><button class="inv-img" data-id="'+esc(id)+'" type="button" title="Imagen del objeto">'+thumb+'</button><input class="inv-nom-in" value="'+esc(it.nombre||"")+'" placeholder="Objeto"><input class="inv-cant-in" type="number" min="1" value="'+cant+'" title="Cantidad"><input class="inv-peso-in" type="number" min="0" step="0.1" value="'+peso+'" title="Peso por unidad (kg)"><span class="inv-sub">'+(peso?((cant*peso).toFixed(1)+" kg"):"—")+'</span>'+(hayConts?('<select class="item-cont" data-id="'+esc(id)+'" title="Contenedor">'+contOpts(it.cont)+'</select>'):'')+(dests.length?('<button class="inv-trasp" data-id="'+esc(id)+'" type="button" title="Traspasar al destino seleccionado">↔</button>'):'')+'<button class="inv-del" data-id="'+esc(id)+'" type="button">🗑</button></div>';
     return '<div class="inv-row ro"><span class="inv-thumb">'+thumb+'</span><span class="inv-nom">'+esc(it.nombre||"")+'</span><span class="inv-cant">×'+cant+'</span><span class="inv-sub">'+(peso?((cant*peso).toFixed(1)+" kg"):"—")+'</span></div>';
   }
   if(!hayConts){
@@ -1978,7 +1979,8 @@ function renderInventario(){
       var ids=keys.filter(function(id){ var c=items[id].cont; return (cid==="")?(!c||!conts[c]):(c===cid); });
       var gW=0; ids.forEach(function(id){ gW+=(Number(items[id].cantidad)||1)*(Number(items[id].peso)||0); });
       var over=(pesoMax>0&&gW>pesoMax);
-      html+='<div class="inv-cont'+(over?" over":"")+'"><div class="inv-cont-head">'+icon+' <b>'+esc(nombre)+'</b> <span class="inv-cont-w'+(over?" over":"")+'">'+gW.toFixed(1)+(pesoMax>0?(' / '+pesoMax+' kg'+(over?' ¡lleno!':'')):' kg')+'</span>'+((puede&&cid)?(' <input class="cont-max-in" data-cid="'+esc(cid)+'" type="number" min="0" value="'+(pesoMax||"")+'" placeholder="máx" title="Peso máximo del contenedor (vacío = sin límite)"><button class="cont-del" data-cid="'+esc(cid)+'" type="button" title="Borrar contenedor">🗑</button>'):'')+'</div><div class="inv-list">';
+      var colKey=sec+"|"+cid, col=!!INVCOLAPSO[colKey];
+      html+='<div class="inv-cont'+(over?" over":"")+'" data-cont="'+esc(cid)+'"><div class="inv-cont-head"><button class="inv-cont-tg" data-col="'+esc(colKey)+'" type="button" title="Plegar/desplegar">'+(col?"▸":"▾")+'</button>'+icon+' <b>'+esc(nombre)+'</b> <span class="inv-cont-w'+(over?" over":"")+'">'+gW.toFixed(1)+(pesoMax>0?(' / '+pesoMax+' kg'+(over?' ¡lleno!':'')):' kg')+'</span> <span class="inv-cont-count">'+ids.length+' obj.</span>'+((puede&&cid)?(' <input class="cont-max-in" data-cid="'+esc(cid)+'" type="number" min="0" value="'+(pesoMax||"")+'" placeholder="máx" title="Peso máximo del contenedor (vacío = sin límite)"><button class="cont-del" data-cid="'+esc(cid)+'" type="button" title="Borrar contenedor">🗑</button>'):'')+'</div><div class="inv-list"'+(col?' style="display:none"':'')+'>';
       if(!ids.length)html+='<div class="empty" style="padding:9px;font-size:12px;">Vacío.</div>';
       ids.forEach(function(id){ html+=itemRow(id); });
       html+='</div></div>';
@@ -2023,6 +2025,7 @@ function renderInventario(){
   html+='</div>'; // /inv-dinero
   html+='</div>'; // /inv
   document.getElementById("list").innerHTML=html;
+  var tgs=document.querySelectorAll("#list .inv-cont-tg"); for(var tg2=0;tg2<tgs.length;tg2++){(function(b){b.addEventListener("click",function(){ var k=b.getAttribute("data-col"); if(INVCOLAPSO[k])delete INVCOLAPSO[k]; else INVCOLAPSO[k]=1; renderInventario(); });})(tgs[tg2]);} // plegar/desplegar (también lo pueden usar los espectadores)
   if(!puede)return;
   var coins=document.querySelectorAll("#list .coin-in");
   for(var i=0;i<coins.length;i++){(function(inp){inp.addEventListener("change",function(){setDinero(sec,inp.getAttribute("data-coin"),inp.value);});})(coins[i]);}
@@ -2045,6 +2048,19 @@ function renderInventario(){
   var contMaxs=document.querySelectorAll("#list .cont-max-in"); for(var cm2=0;cm2<contMaxs.length;cm2++){(function(inp){inp.addEventListener("change",function(){editContenedor(sec,inp.getAttribute("data-cid"),"pesoMax",inp.value);});})(contMaxs[cm2]);}
   var contDels=document.querySelectorAll("#list .cont-del"); for(var cd2=0;cd2<contDels.length;cd2++){(function(b){b.addEventListener("click",function(){delContenedor(sec,b.getAttribute("data-cid"));});})(contDels[cd2]);}
   var itemConts=document.querySelectorAll("#list .item-cont"); for(var ic2=0;ic2<itemConts.length;ic2++){(function(s){s.addEventListener("change",function(){setItemCont(sec,s.getAttribute("data-id"),s.value);});})(itemConts[ic2]);}
+  if(!INVTOUCH){ // arrastrar y soltar objetos en contenedores (solo escritorio; en móvil se usa el desplegable de arriba)
+    var drows=document.querySelectorAll("#list .inv-row[draggable]");
+    for(var dr=0;dr<drows.length;dr++){(function(row){ var id=row.getAttribute("data-id");
+      row.addEventListener("dragstart",function(e){ invDrag=id; row.classList.add("dragging"); try{e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain",id);}catch(x){} });
+      row.addEventListener("dragend",function(){ invDrag=null; row.classList.remove("dragging"); var z=document.querySelectorAll("#list .inv-cont.dropover"); for(var q=0;q<z.length;q++)z[q].classList.remove("dropover"); });
+    })(drows[dr]);}
+    var zones=document.querySelectorAll("#list .inv-cont[data-cont]");
+    for(var dz=0;dz<zones.length;dz++){(function(zone){ var cid=zone.getAttribute("data-cont");
+      zone.addEventListener("dragover",function(e){ if(invDrag==null)return; e.preventDefault(); zone.classList.add("dropover"); });
+      zone.addEventListener("dragleave",function(e){ if(!zone.contains(e.relatedTarget))zone.classList.remove("dropover"); });
+      zone.addEventListener("drop",function(e){ e.preventDefault(); zone.classList.remove("dropover"); if(invDrag==null)return; var moved=invDrag; invDrag=null; delete INVCOLAPSO[sec+"|"+cid]; setItemCont(sec,moved,cid); }); // despliega el destino antes de mover (si no, caería en una lista plegada)
+    })(zones[dz]);}
+  }
   var convs=document.querySelectorAll("#list .convbtn");
   for(var k=0;k<convs.length;k++){(function(b){b.addEventListener("click",function(){
     if(b.classList.contains("compact")){ compactarMonedas(sec); return; }
@@ -2321,7 +2337,7 @@ function saveEdictos(){
 
 // ====== Mesa de Duelo (apuestas con dados, en vivo y espectable) ======
 // Los duelos viven en /campanas/{id}/info/duelos/{did} (subárbol info => escribible con las reglas actuales).
-var DUELOS={}, duelState={view:null,pend:{}}, duelResolving={}, duelAutoArmed={}, duelCanceling={}, duelLastPos={};
+var DUELOS={}, duelState={view:null,pend:{}}, duelResolving={}, duelAutoArmed={}, duelCanceling={}, duelLastPos={}, duelHistLimit=8;
 var COIN_NAMES={pt:"Platino",or:"Oro",pl:"Plata",br:"Bronce"};
 // Sondeo en vivo auto-reprogramado: más rápido (1,2s) con el modal abierto para ver el pulso en directo.
 function duelosTick(){
@@ -2353,7 +2369,7 @@ function renderDueloAviso(){
   var b=document.getElementById("duelo-aviso-btn"); if(b)b.addEventListener("click",function(){ abrirDueloModal(ids.length===1?ids[0]:null); });
 }
 function abrirDueloModal(did){ duelState.view=did||null; document.getElementById("duelo-modal").classList.add("open"); var av=document.getElementById("duelo-aviso"); if(av)av.classList.remove("show"); renderDueloModal(); duelosTick(); }
-function closeDueloModal(){ document.getElementById("duelo-modal").classList.remove("open"); duelState.view=null; renderDueloAviso(); }
+function closeDueloModal(){ document.getElementById("duelo-modal").classList.remove("open"); duelState.view=null; duelHistLimit=8; renderDueloAviso(); }
 function renderDueloModal(){
   var body=document.getElementById("duelo-body"); if(!body)return;
   var back=document.getElementById("duelo-back"), title=document.getElementById("duelo-title");
@@ -2370,17 +2386,32 @@ function renderDueloLobby(body){
     html+='<select class="prop-in" id="duelo-coin">'+["or","pt","pl","br"].map(function(c){return '<option value="'+c+'">'+COIN_NAMES[c]+'</option>';}).join('')+'</select>';
     html+='<button class="btn dm" id="duelo-crear" type="button">⚔️ Abrir mesa</button></div>';
   } else html+='<p class="empty" style="padding:6px 0;">Solo los miembros de la campaña pueden abrir o entrar a mesas.</p>';
-  var ids=Object.keys(DUELOS).sort(function(a,b){var fa=DUELOS[a].fecha||"",fb=DUELOS[b].fecha||"";return fa<fb?1:-1;});
+  var byF=function(a,b){var fa=DUELOS[a].fecha||"",fb=DUELOS[b].fecha||"";return fa<fb?1:(fa>fb?-1:0);}; // recientes primero (fechas ISO como STRING; nada de restar → NaN)
+  var activos=Object.keys(DUELOS).filter(function(id){return DUELOS[id].estado!=="cerrado";}).sort(byF);
+  var cerrados=Object.keys(DUELOS).filter(function(id){return DUELOS[id].estado==="cerrado";}).sort(byF);
   html+='<div class="duelo-list">';
-  if(!ids.length)html+='<div class="empty" style="padding:16px;">No hay mesas todavía.</div>';
-  ids.forEach(function(id){ var d=DUELOS[id]||{}, poolV=duelPoolLado(d,"verde"), poolR=duelPoolLado(d,"rojo");
-    var est=d.estado==="cerrado"?'🏁 Terminado':(d.estado==="jugando"?'💪 En juego':'🟢 Apostando');
-    html+='<div class="duelo-card"><div class="duelo-cmain"><div class="duelo-ct">⚔️ '+esc(d.titulo||"Apuestas")+' <span class="duelo-est">'+est+'</span></div><div class="duelo-cmeta">Anfitrión: '+esc(d.host||"?")+' · 🟢 '+poolV+' vs 🔴 '+poolR+' '+(COIN_NAMES[d.coin]||"")+'</div></div><button class="btn duelo-enter" data-did="'+esc(id)+'" type="button">'+(d.estado==="cerrado"?"Ver":"Entrar")+'</button></div>';
+  if(!activos.length)html+='<div class="empty" style="padding:16px;">No hay mesas activas.</div>';
+  activos.forEach(function(id){ var d=DUELOS[id]||{}, poolV=duelPoolLado(d,"verde"), poolR=duelPoolLado(d,"rojo");
+    var est=(d.estado==="jugando"?'💪 En juego':'🟢 Apostando');
+    html+='<div class="duelo-card"><div class="duelo-cmain"><div class="duelo-ct">⚔️ '+esc(d.titulo||"Apuestas")+' <span class="duelo-est">'+est+'</span></div><div class="duelo-cmeta">Anfitrión: '+esc(d.host||"?")+' · 🟢 '+poolV+' vs 🔴 '+poolR+' '+(COIN_NAMES[d.coin]||"")+'</div></div><button class="btn duelo-enter" data-did="'+esc(id)+'" type="button">Entrar</button></div>';
   });
   html+='</div>';
+  if(cerrados.length){
+    html+='<div class="duelo-histh">📜 Historial</div><div class="duelo-list">';
+    cerrados.slice(0,duelHistLimit).forEach(function(id){ var d=DUELOS[id]||{}, ap=d.apuestas||{}, cn=(COIN_NAMES[d.coin]||"");
+      var resumen;
+      if(d.devuelto){ resumen='↩ Devuelto (sin ganadores)'; }
+      else { var win=d.ganador, pagos=d.pagos||{}; var gan=Object.keys(ap).filter(function(u){return ap[u].lado===win;});
+        resumen=(win==="verde"?"🟢 Ganó Verde":(win==="rojo"?"🔴 Ganó Rojo":"Terminado"))+' · '+(gan.length?gan.map(function(u){return esc(u)+" +"+(Math.floor(Number(pagos[u])||0))+(cn?(" "+cn):"");}).join(", "):"sin ganadores"); }
+      html+='<div class="duelo-card cerr"><div class="duelo-cmain"><div class="duelo-ct">⚔️ '+esc(d.titulo||"Apuestas")+' <span class="duelo-est">🏁</span></div><div class="duelo-cmeta">'+resumen+'</div></div><button class="btn duelo-enter" data-did="'+esc(id)+'" type="button">Ver</button></div>';
+    });
+    html+='</div>';
+    if(cerrados.length>duelHistLimit)html+='<button class="btn duelo-hist-more" type="button">Ver más ('+(cerrados.length-duelHistLimit)+')…</button>';
+  }
   body.innerHTML=html;
   var cr=document.getElementById("duelo-crear"); if(cr)cr.addEventListener("click",crearDuelo);
   var es=body.querySelectorAll(".duelo-enter"); for(var i=0;i<es.length;i++){(function(b){b.addEventListener("click",function(){duelState.view=b.getAttribute("data-did");renderDueloModal();});})(es[i]);}
+  var hm=body.querySelector(".duelo-hist-more"); if(hm)hm.addEventListener("click",function(){ duelHistLimit+=8; renderDueloModal(); });
 }
 function crearDuelo(){
   if(campInfo&&campInfo.bloqueada)return;
@@ -2418,6 +2449,7 @@ function renderDueloRoom(body,did,d){
       html+='<div class="duelo-bet"><div class="duelo-bet-h">💰 Tu apuesta ('+cn+') — tienes '+miSaldo+'</div>';
       html+='<div class="duelo-ladosel"><button class="lado-btn v'+(pend.lado==="verde"?" sel":"")+'" data-lado="verde" type="button">🟢 Verde</button><button class="lado-btn r'+(pend.lado==="rojo"?" sel":"")+'" data-lado="rojo" type="button">🔴 Rojo</button></div>';
       html+='<div class="duelo-bet-row"><button class="btn duelo-minus" type="button">−</button><span class="duelo-amt">'+pend.monto+'</span><button class="btn duelo-plus" type="button">＋</button><button class="btn dm duelo-apostar" type="button">'+(miApuesta?"Actualizar":"Apostar")+'</button></div>';
+      html+='<div class="duelo-steps">'+[-100,-50,-10,-5,5,10,50,100].map(function(s){return '<button class="btn duelo-step'+(s<0?" neg":"")+'" data-step="'+s+'" type="button">'+(s>0?("+"+s):(""+s))+'</button>';}).join('')+'</div>';
       if(miApuesta)html+='<button class="btn duelo-retirar" type="button">↩ Retirar mi apuesta</button>';
       html+='</div>';
     }
@@ -2459,6 +2491,7 @@ function renderDueloRoom(body,did,d){
   var lados=body.querySelectorAll(".lado-btn"); for(var i=0;i<lados.length;i++){(function(b){b.addEventListener("click",function(){ if(!duelState.pend[did])duelState.pend[did]={lado:"verde",monto:1}; duelState.pend[did].lado=b.getAttribute("data-lado"); renderDueloModal(); });})(lados[i]);}
   var minus=body.querySelector(".duelo-minus"); if(minus)minus.addEventListener("click",function(){ var p=duelState.pend[did]||{lado:"verde",monto:1}; p.monto=Math.max(1,(p.monto||1)-1); duelState.pend[did]=p; renderDueloModal(); });
   var plus=body.querySelector(".duelo-plus"); if(plus)plus.addEventListener("click",function(){ var p=duelState.pend[did]||{lado:"verde",monto:1}; var cap=miSaldo+mineMonto, nv=(p.monto||1)+1; if(cap>0&&nv>cap)nv=cap; p.monto=Math.max(1,nv); duelState.pend[did]=p; renderDueloModal(); });
+  var stepsB=body.querySelectorAll(".duelo-step"); for(var sb=0;sb<stepsB.length;sb++){(function(b){b.addEventListener("click",function(){ var p=duelState.pend[did]||{lado:"verde",monto:1}; var cap=miSaldo+mineMonto, nv=(p.monto||1)+(parseInt(b.getAttribute("data-step"),10)||0); if(nv<1)nv=1; if(cap>0&&nv>cap)nv=cap; p.monto=nv; duelState.pend[did]=p; renderDueloModal(); });})(stepsB[sb]);}
   var apb=body.querySelector(".duelo-apostar"); if(apb)apb.addEventListener("click",function(){apostarLado(did);});
   var rt=body.querySelector(".duelo-retirar"); if(rt)rt.addEventListener("click",function(){retirarDuelo(did);});
   var npcAdd=body.querySelector("#npc-add"); if(npcAdd)npcAdd.addEventListener("click",function(){addNpcDuelo(did);});
