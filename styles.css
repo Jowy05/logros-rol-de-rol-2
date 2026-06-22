@@ -455,6 +455,18 @@
   .convbtn.traspd{flex:1 1 100%;background:#16314e;border-color:#2a6a8f;color:#9fd3ff;font-weight:600;}
   .convbtn.traspd:hover{background:#1d4060;}
   .inv-trasp-note{font-size:11px;color:var(--muted);margin-top:5px;}
+  .inv-cont{border:1px solid var(--line);border-radius:9px;margin-bottom:10px;background:#11202c;overflow:hidden;}
+  .inv-cont.over{border-color:#7d2f33;}
+  .inv-cont-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 11px;background:#16242f;border-bottom:1px solid var(--line);font-size:13.5px;color:#fff;}
+  .inv-cont-head b{color:#fff;}
+  .inv-cont-w{font-size:12px;color:#9fd3a0;}
+  .inv-cont-w.over{color:#ff8a8a;font-weight:600;}
+  .inv-cont-head .cont-max-in{width:70px;background:#0f1c27;border:1px solid var(--line);border-radius:6px;color:var(--text);padding:4px 6px;font-size:12px;outline:none;margin-left:auto;}
+  .inv-cont-head .cont-max-in:focus{border-color:var(--accent);}
+  .cont-del{background:#3a1c1c;border:1px solid #6b2a2a;color:#ffb3b3;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;}
+  .inv-cont .inv-list{padding:8px 10px;}
+  .item-cont{flex:0 0 auto;width:96px;background:#0f1c27;border:1px solid var(--line);border-radius:6px;color:var(--text);padding:5px 6px;font-size:11.5px;cursor:pointer;}
+  @media(max-width:600px){ .item-cont{width:78px;} }
   @media(max-width:600px){ .inv{flex-direction:column;} .inv-dinero{flex:1 1 auto;width:100%;box-sizing:border-box;} .inv-nom-in{flex:1 1 100%;} .inv-add .ar{width:70px;} }
 
   /* ===== Logro oculto / bloqueado / herramientas de tarjeta ===== */
