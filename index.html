@@ -291,7 +291,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=51; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=52; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -1239,7 +1239,7 @@ function entrarCampana(id){
     currentCamp=id;campInfo=c.info;GMname=c.info.gm||"";MIEMBROS=ordenMiembros(c.info.miembros).filter(function(m){return m!==GMname;});
     LOGROS=toArr(c.logros);progreso=c.progreso||{};guiaMD=(typeof c.guia==="string")?c.guia:null;INV=c.inventario||{};
     DUELOS=(c.info&&c.info.duelos)||{}; duelState.view=null;
-    state.tab="grupo";state.sub="todos";state.invSub="__general__";
+    state.tab="grupo";state.sub="todos";state.invSub=(c.info.miembros&&c.info.miembros[currentUser])?currentUser:"__general__"; // abre el inventario en TU sección (no en General), así General sí sale como destino de traspaso
     document.getElementById("camp-nombre").textContent=esc(c.info.nombre||id);
     document.getElementById("camp-rol").textContent="Tú: "+currentUser+" ("+rolDe(currentUser)+")";
     updateWhoami();
@@ -1918,7 +1918,7 @@ function setCargaMax(sec,val){ if(!puedeEditarInv(sec))return; var v=Math.max(0,
 // Imagen de un objeto (reducida a 64x64): sustituye el icono 📦 del objeto.
 function cambiarImagenItem(file,sec,id){ if(!file||!puedeEditarInv(sec))return; var rd=new FileReader(); rd.onload=function(){ var img=new Image(); img.onload=function(){ var sz=64,cv=document.createElement("canvas");cv.width=sz;cv.height=sz;var ctx=cv.getContext("2d"); var s=Math.min(img.width,img.height),sx=(img.width-s)/2,sy=(img.height-s)/2; ctx.drawImage(img,sx,sy,s,s,0,0,sz,sz); var data=cv.toDataURL("image/jpeg",0.7); if(data.length>95000){ alert("Imagen muy grande, prueba con otra más sencilla."); return; } var it=invData(sec).items[id]; if(!it)return; it.img=data; saveItemFB(sec,id); render(); }; img.src=rd.result; }; rd.readAsDataURL(file); }
 // ---- Traspasos entre inventarios ----
-function seccionesInv(cur){ var out=[]; if(cur!=="__general__")out.push({k:"__general__",l:"📦 General"}); MIEMBROS.forEach(function(m){ if(m!==cur)out.push({k:m,l:m}); }); return out; }
+function seccionesInv(cur){ var out=[{k:"__general__",l:"📦 General"}]; MIEMBROS.forEach(function(m){ if(m!==cur)out.push({k:m,l:m}); }); return out; } // General SIEMPRE aparece como destino (si es la sección actual, el traspaso a sí misma se ignora con aviso)
 function secLabel(k){ return k==="__general__"?"General":k; }
 // Lee /inventario/{sec}/dinero fresco, mut(di) lo modifica (devuelve false para abortar) y guarda. NO comprueba permisos (el destino recibe regalos).
 function ajustarDineroSec(sec,mut){
@@ -1926,7 +1926,8 @@ function ajustarDineroSec(sec,mut){
   return fetch(url+"?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(di){ di=di||{}; var res=mut(di); if(res===false)return false; return fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(di)}).then(function(rr){ if(rr.ok)invData(sec).dinero=di; return rr.ok; }); }).catch(function(){return false;});
 }
 function traspasarDinero(fromSec,toSec,sub){
-  if(!puedeEditarInv(fromSec)||fromSec===toSec)return;
+  if(!puedeEditarInv(fromSec))return;
+  if(fromSec===toSec){ setStatus("Elige una sección distinta"); return; }
   var subBr=dineroABronce(sub); if(subBr<=0){ setStatus("Indica cuánto traspasar"); return; }
   setStatus("Traspasando…");
   ajustarDineroSec(fromSec,function(di){ if(subBr>dineroABronce(di)){ alert("No tienes suficiente para traspasar."); return false; } gastarMonedas(di,sub); return true; }).then(function(ok){
@@ -1938,7 +1939,8 @@ function traspasarDinero(fromSec,toSec,sub){
   });
 }
 function traspasarItem(fromSec,toSec,id){
-  if(!puedeEditarInv(fromSec)||fromSec===toSec)return;
+  if(!puedeEditarInv(fromSec))return;
+  if(fromSec===toSec){ setStatus("Elige una sección distinta"); return; }
   var it=(invData(fromSec).items||{})[id]; if(!it)return;
   var copia=Object.assign({},it), newId="i"+(new Date().getTime())+Math.floor(Math.random()*1000);
   setStatus("Traspasando…");
