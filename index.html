@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>RolCampaingAwardSystem</title>
-<link rel="stylesheet" href="styles.css?v=34">
+<link rel="stylesheet" href="styles.css?v=35">
 </head>
 <body>
 
@@ -141,6 +141,7 @@
       <button class="btn dm" id="perfil-foto-btn" type="button">📷 Cambiar foto</button>
       <button class="btn" id="perfil-pass-btn" type="button">🔑 Contraseña</button>
       <button class="btn" id="perfil-vista-btn" type="button" style="display:none;">👁️ Ver como jugador</button>
+      <button class="btn dm" id="perfil-titulo-btn" type="button" style="display:none;">🏷️ Dar título</button>
       <button class="btn" id="perfil-close" type="button">✕ Cerrar</button>
     </div>
     <div class="modal-body" id="perfil-body"></div>
@@ -205,6 +206,15 @@
       <button class="btn" id="edicto-close" type="button">✕ Cerrar</button>
     </div>
     <div class="modal-body" id="edicto-body"></div>
+  </div>
+</div>
+<div class="modal" id="titulo-modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="titulo-modal-title">🏷️ Dar título</h2>
+      <button class="btn" id="titulo-close" type="button">✕ Cerrar</button>
+    </div>
+    <div class="modal-body" id="titulo-body"></div>
   </div>
 </div>
 <div class="modal" id="progreso-modal">
@@ -281,7 +291,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=49; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=50; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -453,7 +463,7 @@ function renderDirectorio(bodyId, users, admin){
       var pf=perfiles[u]||{}, cu=computarCuenta(camps,u,pf.bonusXP,pf.apuestas), foto=(typeof pf.foto==="string")?pf.foto:null, eqt=(pf.titulo&&pf.titulo.t)?pf.titulo:null;
       var avc=marcoNivel(cu.nivel.lvl), avcls=avc?(" mn-"+avc):"", yo=(u===currentUser);
       var av=foto?('<img class="avatar-sm'+avcls+'" src="'+foto+'" alt="">'):('<span class="avatar-ini'+avcls+'">'+esc(u.charAt(0).toUpperCase())+'</span>');
-      html+='<div class="dir-row"><div class="dir-main" data-user="'+esc(u)+'" title="Ver perfil">'+av+'<div class="dir-tx"><div class="dir-name">'+esc(u)+' <span class="rol-badge rol-'+rolDe(u)+'">'+rolDe(u)+'</span></div>'+(eqt?('<div class="dir-titulo titulo r-'+(eqt.r||"comun")+'">🏷️ '+esc(eqt.t)+'</div>'):'')+'<div class="dir-sub">Nivel '+cu.nivel.lvl+' · '+cu.total+' logros'+(cu.prestigio?(' · '+cu.prestigio+'⭐'):'')+'</div></div></div>';
+      html+='<div class="dir-row"><div class="dir-main" data-user="'+esc(u)+'" title="Ver perfil">'+av+'<div class="dir-tx"><div class="dir-name">'+esc(u)+' <span class="rol-badge rol-'+rolDe(u)+'">'+rolDe(u)+'</span></div>'+(eqt?('<div class="dir-titulo titulo r-'+(eqt.r||"comun")+'">'+titIco(eqt)+esc(eqt.t)+'</div>'):'')+'<div class="dir-sub">Nivel '+cu.nivel.lvl+' · '+cu.total+' logros'+(cu.prestigio?(' · '+cu.prestigio+'⭐'):'')+'</div></div></div>';
       if(admin){ html+='<div class="dir-admin"><select class="cuenta-rol" data-u="'+esc(u)+'"'+(yo?' disabled':'')+'>'+['jugador','gm','owner'].map(function(rr){return '<option value="'+rr+'"'+(rolDe(u)===rr?' selected':'')+'>'+rr+'</option>';}).join('')+'</select><button class="btn cuenta-pass" data-u="'+esc(u)+'" type="button"'+(yo?' disabled':'')+' title="Restablecer contraseña">🔑</button><button class="btn cuenta-del" data-u="'+esc(u)+'" type="button"'+(yo?' disabled':'')+' title="Borrar cuenta">🗑</button></div>'; }
       html+='</div>';
     });
@@ -500,6 +510,9 @@ let currentUser="", currentCamp=null, campInfo=null, MIEMBROS=[], GMname="";
 let LOGROS=[], progreso={}, guiaMD=null, editMode=false;
 var INV={};
 var guiaEditing=false, dragSrc=null, saveTimers={}, chainSource=null, miVitrina=[], pendingPjIcon=null, fotoCampId=null, pendingItemImg=null;
+var darTituloUser=null, tituloImgTmp=null, pendingTituloImg=false, titulosDisp=[];
+// Icono de un título equipado: imagen si la tiene (sustituye el 🏷️), o el 🏷️ por defecto.
+function titIco(tit){ return (tit&&tit.img)?('<img class="tit-img" src="'+tit.img+'" alt="">'):'🏷️ '; }
 const PREFS="rdr2_prefs_v3", SESSION="rdr2_session";
 let prefs={filtro:"todos"};
 try{prefs=Object.assign(prefs,JSON.parse(localStorage.getItem(PREFS))||{});}catch(e){}
@@ -719,7 +732,7 @@ var miPerfilFoto=null, perfilLogros=[], perfilUser=null, miNivelCuenta=1, pendin
 function avatarChip(){ var mc=marcoNivel(miNivelCuenta),cls=mc?(" mn-"+mc):""; return miPerfilFoto?('<img class="avatar-sm'+cls+'" src="'+miPerfilFoto+'" alt="">'):('<span class="avatar-ini'+cls+'">'+esc((currentUser||"?").charAt(0).toUpperCase())+'</span>'); }
 function updateWhoami(){
   var base='<span class="who-name">'+esc(currentUser)+'</span>';
-  var tit=(miTitulo&&miTitulo.t)?('<span class="who-titulo titulo r-'+(miTitulo.r||"comun")+'">'+esc(miTitulo.t)+'</span>'):'';
+  var tit=(miTitulo&&miTitulo.t)?('<span class="who-titulo titulo r-'+(miTitulo.r||"comun")+'">'+(miTitulo.img?('<img class="tit-img" src="'+miTitulo.img+'" alt="">'):'')+esc(miTitulo.t)+'</span>'):'';
   var vj=(vistaJugador&&esOwnerReal());
   var w1=document.getElementById("camp-whoami"); if(w1)w1.innerHTML=avatarChip()+base+tit+'<span class="who-rol'+(vj?" vj":"")+'">'+(vj?"👁️ vista jugador":rolDe(currentUser))+'</span>';
   var w2=document.getElementById("whoami"); if(w2)w2.innerHTML=avatarChip()+base+tit;
@@ -747,6 +760,7 @@ function openPerfil(user,volverA){
   document.getElementById("perfil-foto-btn").style.display=propio?"inline-block":"none";
   document.getElementById("perfil-pass-btn").style.display=propio?"inline-block":"none";
   var vb=document.getElementById("perfil-vista-btn"); if(vb){ vb.style.display=(esOwnerReal()&&propio)?"inline-block":"none"; vb.textContent=vistaJugador?"👑 Volver a Owner":"👁️ Ver como jugador"; }
+  var tbt=document.getElementById("perfil-titulo-btn"); if(tbt)tbt.style.display=puedeCrear()?"inline-block":"none";
   document.getElementById("perfil-modal").classList.add("open");renderPerfil();
 }
 function closePerfil(){
@@ -781,17 +795,21 @@ function renderPerfil(){
     if(propio)miNivelCuenta=nv.lvl;
     var eqTit=(perf.titulo&&perf.titulo.t)?perf.titulo:null;
     if(propio)miTitulo=eqTit;
-    var titHead=eqTit?('<div class="titulo-eq titulo r-'+(eqTit.r||"comun")+'">🏷️ '+esc(eqTit.t)+'</div>'):'';
+    var titHead=eqTit?('<div class="titulo-eq titulo r-'+(eqTit.r||"comun")+'">'+titIco(eqTit)+esc(eqTit.t)+'</div>'):'';
     var av=foto?('<img src="'+foto+'" alt="">'):esc((user||"?").charAt(0).toUpperCase());
     var estr=cu.prestigio?(' <span class="prestigio" title="Prestigio: campañas terminadas">'+new Array(cu.prestigio+1).join("⭐")+'</span>'):'';
     var html='<div class="perfil-head"><div class="avatar'+avcls+'">'+av+'</div><div><div class="perfil-nombre">'+esc(user)+'<span class="nivel-badge">Nivel '+nv.lvl+'</span></div><span class="rol-badge rol-'+rolDe(user)+'">'+rolDe(user)+'</span>'+estr+titHead+'</div></div>';
     html+='<div class="xp-wrap"><div class="xp-bar"><i style="width:'+pctxp+'%"></i></div><div class="xp-lbl">'+nv.en+' / '+nv.need+' XP para el nivel '+(nv.lvl+1)+' · '+cu.xpTotal+' XP totales</div></div>';
     html+='<div class="perfil-stats"><div class="stat-box"><div class="stat-num">'+cu.total+'</div><div class="stat-lbl">Logros</div></div><div class="stat-box"><div class="stat-num">'+cu.misCamps.length+'</div><div class="stat-lbl">Campañas</div></div><div class="stat-box"><div class="stat-num">'+cu.prestigio+'</div><div class="stat-lbl">Prestigio</div></div></div>';
     if(propio){
+      var todosTit=(cu.titulos||[]).map(function(x){return {t:x.t,r:x.r,img:null};}), seenT={};
+      todosTit.forEach(function(x){seenT[x.t]=1;});
+      var tcust=perf.titulosCustom||{}; Object.keys(tcust).forEach(function(tid){ var t=tcust[tid]; if(t&&t.t&&!seenT[t.t]){ seenT[t.t]=1; todosTit.push({t:t.t,r:t.r||"comun",img:t.img||null}); } });
+      titulosDisp=todosTit;
       html+='<div class="titulos-box"><h3 class="perfil-h3">🏷️ Título</h3>';
-      if(!cu.titulos||!cu.titulos.length) html+='<p style="color:var(--muted);font-size:12.5px;">Aún no tienes títulos. Consigue un logro que otorgue uno.</p>';
+      if(!todosTit.length) html+='<p style="color:var(--muted);font-size:12.5px;">Aún no tienes títulos. Consigue un logro que otorgue uno o pídele uno al GM.</p>';
       else { html+='<div class="titulo-chips"><button class="titulo-chip'+(!eqTit?" sel":"")+'" data-tit="" type="button">Ninguno</button>';
-        cu.titulos.forEach(function(x){ var on=eqTit&&eqTit.t===x.t; html+='<button class="titulo-chip titulo r-'+(x.r||"comun")+(on?" sel":"")+'" data-tit="'+esc(x.t)+'" data-r="'+esc(x.r||"comun")+'" type="button">'+esc(x.t)+'</button>'; });
+        todosTit.forEach(function(x){ var on=eqTit&&eqTit.t===x.t; html+='<button class="titulo-chip titulo r-'+(x.r||"comun")+(on?" sel":"")+'" data-tit="'+esc(x.t)+'" data-r="'+esc(x.r||"comun")+'" type="button">'+(x.img?('<img class="tit-img" src="'+x.img+'" alt="">'):'')+esc(x.t)+'</button>'; });
         html+='</div>'; }
       html+='</div>';
       var aniN=(perf.aniv&&/^\d\d-\d\d$/.test(perf.aniv))?perf.aniv:(perf.creado?mmdd(new Date(perf.creado)):null);
@@ -855,8 +873,44 @@ function renderPerfil(){
 function equiparTitulo(t,r){
   var url=FB+"/perfiles/"+encodeURIComponent(currentUser)+"/titulo.json";
   if(!t){ miTitulo=null; fetch(url,{method:"DELETE"}).then(function(){updateWhoami();renderPerfil();}).catch(function(){}); }
-  else { var same=miTitulo&&miTitulo.t===t; miTitulo={t:t,r:r||"comun"}; if(!same)forjarTituloAnim(t,r||"comun"); fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(miTitulo)}).then(function(){updateWhoami();renderPerfil();}).catch(function(){}); }
+  else { var entry=null; for(var ti=0;ti<titulosDisp.length;ti++){ if(titulosDisp[ti].t===t){entry=titulosDisp[ti];break;} } var same=miTitulo&&miTitulo.t===t; miTitulo={t:t,r:r||"comun"}; if(entry&&entry.img)miTitulo.img=entry.img; if(!same)forjarTituloAnim(t,r||"comun"); fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(miTitulo)}).then(function(){updateWhoami();renderPerfil();}).catch(function(){}); }
 }
+// ====== Títulos personalizados (los crea/reparte el GM/Owner; opcionalmente con imagen) ======
+function openDarTitulo(user){ if(!puedeCrear())return; darTituloUser=user||perfilUser||currentUser; tituloImgTmp=null; document.getElementById("titulo-modal").classList.add("open"); renderTituloModal(); }
+function closeTitulo(){ document.getElementById("titulo-modal").classList.remove("open"); tituloImgTmp=null; darTituloUser=null; }
+function renderTituloModal(){
+  var u=darTituloUser; if(!u)return;
+  document.getElementById("titulo-modal-title").textContent="🏷️ Títulos de "+u;
+  var body=document.getElementById("titulo-body");
+  var rars=[["comun","Común"],["raro","Raro"],["epico","Épico"],["legendario","Legendario"],["mitica","Mítica"]];
+  var prev=tituloImgTmp?('<img class="tit-img" src="'+tituloImgTmp+'" alt="">'):'🏷️';
+  var html='<p class="prop-intro">Crea un título y concédeselo a <b>'+esc(u)+'</b>; podrá equiparlo desde su perfil. El color va por rareza; la imagen (opcional) sustituye el icono 🏷️.</p>';
+  html+='<div class="prop-form"><input class="prop-in prop-tit" id="tit-txt" placeholder="Texto del título" maxlength="40"><select class="prop-in" id="tit-rar">'+rars.map(function(r){return '<option value="'+r[0]+'">'+r[1]+'</option>';}).join('')+'</select><button class="btn" id="tit-img-btn" type="button">'+prev+' Imagen</button><button class="btn dm" id="tit-conceder" type="button">➕ Conceder</button></div>';
+  html+='<div class="prop-list" id="tit-list"><div class="empty" style="padding:10px;">Cargando…</div></div>';
+  body.innerHTML=html;
+  document.getElementById("tit-img-btn").addEventListener("click",function(){ pendingTituloImg=true; document.getElementById("icono-input").click(); });
+  document.getElementById("tit-conceder").addEventListener("click",concederTitulo);
+  fetch(FB+"/perfiles/"+encodeURIComponent(u)+"/titulosCustom.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(tc){
+    tc=tc||{}; var ids=Object.keys(tc), lh='';
+    if(!ids.length)lh='<div class="empty" style="padding:10px;">Aún no tiene títulos personalizados.</div>';
+    ids.forEach(function(tid){ var t=tc[tid]||{}; lh+='<div class="prop-card"><div class="prop-main"><div class="titulo r-'+(t.r||"comun")+'">'+titIco(t)+esc(t.t||"")+'</div></div><button class="btn prop-no" data-tid="'+esc(tid)+'" type="button">🗑 Quitar</button></div>'; });
+    var lst=document.getElementById("tit-list"); if(lst){ lst.innerHTML=lh; var rm=lst.querySelectorAll(".prop-no"); for(var i=0;i<rm.length;i++){(function(b){b.addEventListener("click",function(){borrarTituloCustom(b.getAttribute("data-tid"));});})(rm[i]); } }
+  }).catch(function(){ var lst=document.getElementById("tit-list"); if(lst)lst.innerHTML='<div class="empty">No se pudo cargar.</div>'; });
+}
+function concederTitulo(){
+  if(!puedeCrear()||!darTituloUser)return;
+  var txt=(document.getElementById("tit-txt").value||"").trim(); if(!txt){ alert("Pon el texto del título."); return; }
+  var r=document.getElementById("tit-rar").value||"comun";
+  var tid="t"+(new Date().getTime())+Math.floor(Math.random()*1000), obj={t:txt,r:r}; if(tituloImgTmp)obj.img=tituloImgTmp;
+  setStatus("Guardando…");
+  fetch(FB+"/perfiles/"+encodeURIComponent(darTituloUser)+"/titulosCustom/"+tid+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)}).then(function(r2){ setStatus(r2.ok?"✓ Concedido":"⚠ Error"); if(r2.ok){ logEvento("🏷️ concedió el título «"+txt+"» a "+darTituloUser,""); tituloImgTmp=null; var ti=document.getElementById("tit-txt"); if(ti)ti.value=""; renderTituloModal(); } }).catch(function(){ setStatus("⚠ Error"); });
+}
+function borrarTituloCustom(tid){
+  if(!puedeCrear()||!darTituloUser||!tid)return;
+  if(!confirm("¿Quitar este título personalizado?"))return;
+  fetch(FB+"/perfiles/"+encodeURIComponent(darTituloUser)+"/titulosCustom/"+encodeURIComponent(tid)+".json",{method:"DELETE"}).then(function(){ renderTituloModal(); }).catch(function(){});
+}
+function cambiarImagenTitulo(file){ if(!file)return; var rd=new FileReader(); rd.onload=function(){ var img=new Image(); img.onload=function(){ var sz=48,cv=document.createElement("canvas");cv.width=sz;cv.height=sz;var ctx=cv.getContext("2d"); var s=Math.min(img.width,img.height),sx=(img.width-s)/2,sy=(img.height-s)/2; ctx.drawImage(img,sx,sy,s,s,0,0,sz,sz); var data=cv.toDataURL("image/jpeg",0.72); if(data.length>70000){ alert("Imagen muy grande, prueba con otra más sencilla."); return; } tituloImgTmp=data; renderTituloModal(); }; img.src=rd.result; }; rd.readAsDataURL(file); }
 function addRecuerdo(user){
   if(user!==currentUser)return;
   var titulo=(window.prompt("Título del recuerdo:","")||"").trim(); if(!titulo)return;
@@ -1858,6 +1912,37 @@ function delItemInv(sec,id){ if(!puedeEditarInv(sec))return; var d=invData(sec);
 function setCargaMax(sec,val){ if(!puedeEditarInv(sec))return; var v=Math.max(0,Math.floor(Number(val)||0)); invData(sec).cargaMax=v; fetch(FB+"/campanas/"+currentCamp+"/inventario/"+encodeURIComponent(sec)+"/cargaMax.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(v)}).then(function(r){setStatus(r.ok?"✓ Guardado":"⚠ Error");render();}).catch(function(){setStatus("⚠ Sin conexión");}); }
 // Imagen de un objeto (reducida a 64x64): sustituye el icono 📦 del objeto.
 function cambiarImagenItem(file,sec,id){ if(!file||!puedeEditarInv(sec))return; var rd=new FileReader(); rd.onload=function(){ var img=new Image(); img.onload=function(){ var sz=64,cv=document.createElement("canvas");cv.width=sz;cv.height=sz;var ctx=cv.getContext("2d"); var s=Math.min(img.width,img.height),sx=(img.width-s)/2,sy=(img.height-s)/2; ctx.drawImage(img,sx,sy,s,s,0,0,sz,sz); var data=cv.toDataURL("image/jpeg",0.7); if(data.length>95000){ alert("Imagen muy grande, prueba con otra más sencilla."); return; } var it=invData(sec).items[id]; if(!it)return; it.img=data; saveItemFB(sec,id); render(); }; img.src=rd.result; }; rd.readAsDataURL(file); }
+// ---- Traspasos entre inventarios ----
+function seccionesInv(cur){ var out=[]; if(cur!=="__general__")out.push({k:"__general__",l:"📦 General"}); MIEMBROS.forEach(function(m){ if(m!==cur)out.push({k:m,l:m}); }); return out; }
+function secLabel(k){ return k==="__general__"?"General":k; }
+// Lee /inventario/{sec}/dinero fresco, mut(di) lo modifica (devuelve false para abortar) y guarda. NO comprueba permisos (el destino recibe regalos).
+function ajustarDineroSec(sec,mut){
+  var url=FB+"/campanas/"+currentCamp+"/inventario/"+encodeURIComponent(sec)+"/dinero.json";
+  return fetch(url+"?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(di){ di=di||{}; var res=mut(di); if(res===false)return false; return fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(di)}).then(function(rr){ if(rr.ok)invData(sec).dinero=di; return rr.ok; }); }).catch(function(){return false;});
+}
+function traspasarDinero(fromSec,toSec,sub){
+  if(!puedeEditarInv(fromSec)||fromSec===toSec)return;
+  var subBr=dineroABronce(sub); if(subBr<=0){ setStatus("Indica cuánto traspasar"); return; }
+  setStatus("Traspasando…");
+  ajustarDineroSec(fromSec,function(di){ if(subBr>dineroABronce(di)){ alert("No tienes suficiente para traspasar."); return false; } gastarMonedas(di,sub); return true; }).then(function(ok){
+    if(!ok){ setStatus(""); return; }
+    ajustarDineroSec(toSec,function(di){ ["pt","or","pl","br"].forEach(function(c){ di[c]=(Math.floor(Number(di[c])||0))+Math.max(0,Math.floor(Number(sub[c])||0)); }); return true; }).then(function(ok2){
+      if(!ok2){ ajustarDineroSec(fromSec,function(di){ ["pt","or","pl","br"].forEach(function(c){ di[c]=(Math.floor(Number(di[c])||0))+Math.max(0,Math.floor(Number(sub[c])||0)); }); return true; }); setStatus("⚠ Error; se devolvió el dinero"); return; }
+      setStatus("✓ Traspasado"); logEvento("↔ traspasó "+fmtMoneda(subBr)+" a "+secLabel(toSec),""); render();
+    });
+  });
+}
+function traspasarItem(fromSec,toSec,id){
+  if(!puedeEditarInv(fromSec)||fromSec===toSec)return;
+  var it=(invData(fromSec).items||{})[id]; if(!it)return;
+  var copia=Object.assign({},it), newId="i"+(new Date().getTime())+Math.floor(Math.random()*1000);
+  setStatus("Traspasando…");
+  fetch(FB+"/campanas/"+currentCamp+"/inventario/"+encodeURIComponent(toSec)+"/items/"+newId+".json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(copia)}).then(function(r){
+    if(!r.ok){ setStatus("⚠ Error"); return; }
+    delete invData(fromSec).items[id];
+    fetch(FB+"/campanas/"+currentCamp+"/inventario/"+encodeURIComponent(fromSec)+"/items/"+encodeURIComponent(id)+".json",{method:"DELETE"}).then(function(){ setStatus("✓ Traspasado"); logEvento("↔ traspasó «"+(it.nombre||"objeto")+"» a "+secLabel(toSec),""); render(); });
+  }).catch(function(){ setStatus("⚠ Sin conexión"); });
+}
 function renderInventario(){
   var sec=state.invSub||"__general__", puede=puedeEditarInv(sec);
   var d=INV[sec]||{}, dinero=d.dinero||{}, items=d.items||{};
@@ -1865,6 +1950,7 @@ function renderInventario(){
   var keys=Object.keys(items), itemsW=0;
   var coinsCount=Math.floor(Number(dinero.pt)||0)+Math.floor(Number(dinero.or)||0)+Math.floor(Number(dinero.pl)||0)+Math.floor(Number(dinero.br)||0);
   var coinsW=coinsCount*0.00907, maxC=Math.floor(Number(d.cargaMax)||0); // 0.02 lb (oficial PF) = 0.00907 kg por moneda
+  var dests=puede?seccionesInv(sec):[];
   var html='<div class="inv">';
   // ----- OBJETOS (izquierda, ancho) -----
   html+='<div class="inv-objetos"><div class="inv-h">📋 Objetos</div>';
@@ -1874,7 +1960,7 @@ function renderInventario(){
   keys.forEach(function(id){ var it=items[id]||{}, cant=Number(it.cantidad)||1, peso=Number(it.peso)||0; itemsW+=cant*peso;
     var thumb=it.img?('<img src="'+it.img+'" alt="">'):'📦';
     if(puede){
-      html+='<div class="inv-row" data-id="'+esc(id)+'"><button class="inv-img" data-id="'+esc(id)+'" type="button" title="Imagen del objeto">'+thumb+'</button><input class="inv-nom-in" value="'+esc(it.nombre||"")+'" placeholder="Objeto"><input class="inv-cant-in" type="number" min="1" value="'+cant+'" title="Cantidad"><input class="inv-peso-in" type="number" min="0" step="0.1" value="'+peso+'" title="Peso por unidad (kg)"><span class="inv-sub">'+(peso?((cant*peso).toFixed(1)+" kg"):"—")+'</span><button class="inv-del" data-id="'+esc(id)+'" type="button">🗑</button></div>';
+      html+='<div class="inv-row" data-id="'+esc(id)+'"><button class="inv-img" data-id="'+esc(id)+'" type="button" title="Imagen del objeto">'+thumb+'</button><input class="inv-nom-in" value="'+esc(it.nombre||"")+'" placeholder="Objeto"><input class="inv-cant-in" type="number" min="1" value="'+cant+'" title="Cantidad"><input class="inv-peso-in" type="number" min="0" step="0.1" value="'+peso+'" title="Peso por unidad (kg)"><span class="inv-sub">'+(peso?((cant*peso).toFixed(1)+" kg"):"—")+'</span>'+(dests.length?('<button class="inv-trasp" data-id="'+esc(id)+'" type="button" title="Traspasar al destino seleccionado">↔</button>'):'')+'<button class="inv-del" data-id="'+esc(id)+'" type="button">🗑</button></div>';
     } else {
       html+='<div class="inv-row ro"><span class="inv-thumb">'+thumb+'</span><span class="inv-nom">'+esc(it.nombre||"")+'</span><span class="inv-cant">×'+cant+'</span><span class="inv-sub">'+(peso?((cant*peso).toFixed(1)+" kg"):"—")+'</span></div>';
     }
@@ -1902,6 +1988,11 @@ function renderInventario(){
     html+='<div class="inv-gastar"><div class="inv-gastar-h">💸 Restar / gastar</div><div class="inv-gastar-row">';
     COINS.forEach(function(c){ html+='<input class="gastar-in" data-coin="'+c[0]+'" type="number" min="0" placeholder="'+(c[0].charAt(0).toUpperCase()+c[0].charAt(1))+'" title="'+c[1]+'">'; });
     html+='</div><button class="convbtn restar" data-restar="1" type="button" title="Resta del total; si falta de una moneda, descompacta las de arriba">➖ Restar</button></div>';
+    if(dests.length){
+      html+='<div class="inv-trasp-box"><div class="inv-gastar-h">↔ Traspasar a <select class="trasp-dest" id="trasp-dest">'+dests.map(function(s){return '<option value="'+esc(s.k)+'">'+esc(s.l)+'</option>';}).join('')+'</select></div><div class="inv-gastar-row">';
+      COINS.forEach(function(c){ html+='<input class="traspd-in" data-coin="'+c[0]+'" type="number" min="0" placeholder="'+(c[0].charAt(0).toUpperCase()+c[0].charAt(1))+'" title="'+c[1]+'">'; });
+      html+='</div><button class="convbtn traspd" type="button" title="Envía esas monedas al destino">↔ Enviar dinero</button><div class="inv-trasp-note">Para objetos, pulsa ↔ en cada uno.</div></div>';
+    }
   }
   html+='</div>'; // /inv-dinero
   html+='</div>'; // /inv
@@ -1921,6 +2012,9 @@ function renderInventario(){
   var imgs=document.querySelectorAll("#list .inv-img");
   for(var ii=0;ii<imgs.length;ii++){(function(b){b.addEventListener("click",function(){ pendingItemImg={sec:sec,id:b.getAttribute("data-id")}; document.getElementById("icono-input").click(); });})(imgs[ii]);}
   var cmax=document.querySelector("#list .cargamax-in"); if(cmax)cmax.addEventListener("change",function(){ setCargaMax(sec,cmax.value); });
+  var traspB=document.querySelectorAll("#list .inv-trasp");
+  for(var tb2=0;tb2<traspB.length;tb2++){(function(b){b.addEventListener("click",function(){ var dest=(document.getElementById("trasp-dest")||{}).value; if(!dest){alert("No hay destino disponible.");return;} if(confirm("¿Traspasar este objeto a "+secLabel(dest)+"?"))traspasarItem(sec,dest,b.getAttribute("data-id")); });})(traspB[tb2]);}
+  var traspM=document.querySelector("#list .traspd"); if(traspM)traspM.addEventListener("click",function(){ var dest=(document.getElementById("trasp-dest")||{}).value; if(!dest)return; var sub={}, ins=document.querySelectorAll("#list .traspd-in"); for(var j=0;j<ins.length;j++){ sub[ins[j].getAttribute("data-coin")]=Math.floor(Number(ins[j].value)||0); } traspasarDinero(sec,dest,sub); });
   var convs=document.querySelectorAll("#list .convbtn");
   for(var k=0;k<convs.length;k++){(function(b){b.addEventListener("click",function(){
     if(b.classList.contains("compact")){ compactarMonedas(sec); return; }
@@ -2584,7 +2678,10 @@ function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reloa
   document.getElementById("perfil-pass-btn").addEventListener("click",cambiarPass);
   document.getElementById("perfil-vista-btn").addEventListener("click",toggleVistaJugador);
   document.getElementById("foto-input").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];if(f){if(fotoCampId){cambiarFotoCampana(f,fotoCampId);fotoCampId=null;}else cambiarFoto(f);}e.target.value="";});
-  document.getElementById("icono-input").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];if(f){if(pendingItemImg){cambiarImagenItem(f,pendingItemImg.sec,pendingItemImg.id);pendingItemImg=null;}else if(pendingPjIcon){cambiarIconoPJ(f,pendingPjIcon);pendingPjIcon=null;}else cambiarIconoLogro(f);}e.target.value="";});
+  document.getElementById("icono-input").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];if(f){if(pendingTituloImg){cambiarImagenTitulo(f);pendingTituloImg=false;}else if(pendingItemImg){cambiarImagenItem(f,pendingItemImg.sec,pendingItemImg.id);pendingItemImg=null;}else if(pendingPjIcon){cambiarIconoPJ(f,pendingPjIcon);pendingPjIcon=null;}else cambiarIconoLogro(f);}e.target.value="";});
+  document.getElementById("titulo-close").addEventListener("click",closeTitulo);
+  document.getElementById("titulo-modal").addEventListener("click",function(e){if(e.target.id==="titulo-modal")closeTitulo();});
+  document.getElementById("perfil-titulo-btn").addEventListener("click",function(){openDarTitulo(perfilUser);});
   document.getElementById("backup-input").addEventListener("change",function(e){if(e.target.files&&e.target.files[0])importarTodo(e.target.files[0]);e.target.value="";});
   document.getElementById("cuentas-btn").addEventListener("click",openCuentas);
   document.getElementById("cuentas-close").addEventListener("click",closeCuentas);
