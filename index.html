@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>RolCampaingAwardSystem</title>
-<link rel="stylesheet" href="styles.css?v=39">
+<link rel="stylesheet" href="styles.css?v=40">
 </head>
 <body>
 
@@ -291,7 +291,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=55; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=56; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -2066,8 +2066,11 @@ function fmtRango(L,D){ var aL=L.getFullYear(), aD=D.getFullYear(); var izq=L.ge
 function estadoDe(dk,m){ var f=QUEDADAS[dk]; return (f&&f[m])||""; }
 function quienPuede(dk){ return MIEMBROS.filter(function(m){return estadoDe(dk,m)==="si";}); }
 function quienNo(dk){ return MIEMBROS.filter(function(m){return estadoDe(dk,m)==="no";}); }
+function quienTalvez(dk){ return MIEMBROS.filter(function(m){return estadoDe(dk,m)==="talvez";}); }
 function sinMarcar(dk){ return MIEMBROS.filter(function(m){return estadoDe(dk,m)==="";}); }
-function topDias(off){ return diasSemana(off).map(function(d){ var dk=dkey(d); return {d:d,dk:dk,n:quienPuede(dk).length}; }).filter(function(x){return x.n>0;}).sort(function(a,b){ return (b.n-a.n)||(a.d-b.d); }).slice(0,3); }
+// Puntos del TOP: cada "sí" vale 1, cada "tal vez" vale 0,5.
+function puntosDia(dk){ return quienPuede(dk).length + quienTalvez(dk).length*0.5; }
+function topDias(off){ return diasSemana(off).map(function(d){ var dk=dkey(d); return {d:d,dk:dk,n:quienPuede(dk).length,tv:quienTalvez(dk).length,pts:puntosDia(dk)}; }).filter(function(x){return x.pts>0;}).sort(function(a,b){ return (b.pts-a.pts)||(a.d-b.d); }).slice(0,3); }
 function puedeMarcarQuedada(){ return !(campInfo&&campInfo.bloqueada) && esMiembroCampana() && MIEMBROS.indexOf(currentUser)>=0; }
 // Marca SOLO mi hoja por subruta (PUT/DELETE) → nunca pisa la de otro. Optimista con guard anti-reversión (quedadaPend).
 function setQuedada(dk,val){
@@ -2096,6 +2099,7 @@ function mergeQuedadas(q){
 }
 function clicPuedo(dk){ setQuedada(dk, estadoDe(dk,currentUser)==="si"?"":"si"); }
 function clicNo(dk){ setQuedada(dk, estadoDe(dk,currentUser)==="no"?"":"no"); }
+function clicTalvez(dk){ setQuedada(dk, estadoDe(dk,currentUser)==="talvez"?"":"talvez"); }
 function cargarQuedadas(){ fetch(FB+"/campanas/"+currentCamp+"/info/quedadas.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():{};}).then(function(q){ QUEDADAS=q||{}; quedadasLoaded=true; if(state.tab==="cal")renderCalendario(); }).catch(function(){}); }
 function renderCalendario(){
   var list=document.getElementById("list");
@@ -2104,23 +2108,24 @@ function renderCalendario(){
   html+='<div class="cal-nav"><button class="btn" id="cal-prev" type="button">◀</button><button class="btn" id="cal-hoy" type="button">📍 Hoy</button><button class="btn" id="cal-next" type="button">▶</button><span class="cal-rango">'+esc(fmtRango(dias[0],dias[6]))+'</span></div>';
   html+='<div class="cal-grid">';
   dias.forEach(function(d){
-    var dk=dkey(d), si=quienPuede(dk), no=quienNo(dk), sm=sinMarcar(dk), esHoy=(dk===hoy), mio=estadoDe(dk,currentUser);
+    var dk=dkey(d), si=quienPuede(dk), tv=quienTalvez(dk), no=quienNo(dk), sm=sinMarcar(dk), esHoy=(dk===hoy), mio=estadoDe(dk,currentUser);
     html+='<div class="cal-dia'+(esHoy?" cal-hoy":"")+'">';
     html+='<div class="cal-dia-h">'+DIAS_SEM[(d.getDay()+6)%7]+' <b>'+d.getDate()+'</b>'+(esHoy?' <span class="cal-badge">HOY</span>':'')+'</div>';
-    html+='<div class="cal-cnt">✅ '+si.length+(total?('/'+total):'')+'</div>';
+    html+='<div class="cal-cnt">✅ '+si.length+(total?('/'+total):'')+(tv.length?(' <span class="cal-cnt-tv">🤔 '+tv.length+'</span>'):'')+'</div>';
     html+='<div class="cal-avs">'+(si.length?si.map(function(m){return '<span class="cal-av" title="'+esc(m)+'">'+iconPJHTML(m)+'</span>';}).join(''):'<span class="cal-vacio">—</span>')+'</div>';
+    if(tv.length)html+='<div class="cal-tv" title="Tal vez: '+esc(tv.join(", "))+'">🤔 '+tv.map(function(m){return '<span class="cal-av">'+iconPJHTML(m)+'</span>';}).join('')+'</div>';
     if(no.length)html+='<div class="cal-no" title="No pueden: '+esc(no.join(", "))+'">❌ '+no.map(function(m){return '<span class="cal-av">'+iconPJHTML(m)+'</span>';}).join('')+'</div>';
     if(sm.length)html+='<div class="cal-sm" title="Sin contestar: '+esc(sm.join(", "))+'">❔ '+sm.length+' sin contestar</div>';
-    if(marcar)html+='<div class="cal-acc"><button class="cal-btn si'+(mio==="si"?" on":"")+'" data-dk="'+dk+'" data-a="si" type="button">✅ Puedo</button><button class="cal-btn no'+(mio==="no"?" on":"")+'" data-dk="'+dk+'" data-a="no" type="button">❌ No</button></div>';
+    if(marcar)html+='<div class="cal-acc"><button class="cal-btn si'+(mio==="si"?" on":"")+'" data-dk="'+dk+'" data-a="si" type="button">✅ Puedo</button><button class="cal-btn tv'+(mio==="talvez"?" on":"")+'" data-dk="'+dk+'" data-a="talvez" type="button">🤔 Tal vez</button><button class="cal-btn no'+(mio==="no"?" on":"")+'" data-dk="'+dk+'" data-a="no" type="button">❌ No</button></div>';
     html+='</div>';
   });
   html+='</div></div>';
   var top=topDias(off), med=["🥇","🥈","🥉"];
   html+='<aside class="cal-side"><div class="cal-top"><div class="cal-top-h">🏆 TOP DÍAS</div>';
   if(top.length){
-    top.forEach(function(tt,i){ html+='<div class="cal-top-row'+(i===0?" top1":"")+'"><span class="cal-med">'+med[i]+'</span><span class="cal-top-d">'+DIAS_SEM[(tt.d.getDay()+6)%7]+' '+tt.d.getDate()+'</span><span class="cal-top-n">✅ '+tt.n+(total?('/'+total):'')+'</span><span class="cal-top-avs">'+quienPuede(tt.dk).map(function(m){return '<span class="cal-av">'+iconPJHTML(m)+'</span>';}).join('')+'</span></div>'; });
+    top.forEach(function(tt,i){ html+='<div class="cal-top-row'+(i===0?" top1":"")+'"><span class="cal-med">'+med[i]+'</span><span class="cal-top-d">'+DIAS_SEM[(tt.d.getDay()+6)%7]+' '+tt.d.getDate()+'</span><span class="cal-top-n">✅'+tt.n+(tt.tv?(' <span class="cal-cnt-tv">🤔'+tt.tv+'</span>'):'')+'</span><span class="cal-top-avs">'+quienPuede(tt.dk).map(function(m){return '<span class="cal-av">'+iconPJHTML(m)+'</span>';}).join('')+quienTalvez(tt.dk).map(function(m){return '<span class="cal-av tv">'+iconPJHTML(m)+'</span>';}).join('')+'</span></div>'; });
     var b=top[0], falta=sinMarcar(b.dk);
-    html+='<div class="cal-mejor">⭐ Mejor: <b>'+DIAS_SEM[(b.d.getDay()+6)%7]+' '+b.d.getDate()+'</b> ('+b.n+(total?('/'+total):'')+')'+(falta.length?'<div class="cal-falta">falta por contestar: '+esc(falta.join(", "))+'</div>':'')+'</div>';
+    html+='<div class="cal-mejor">⭐ Mejor: <b>'+DIAS_SEM[(b.d.getDay()+6)%7]+' '+b.d.getDate()+'</b> (✅'+b.n+(b.tv?(' 🤔'+b.tv):'')+')'+(falta.length?'<div class="cal-falta">falta por contestar: '+esc(falta.join(", "))+'</div>':'')+'</div>';
   } else {
     html+='<div class="cal-vacio" style="padding:12px;">Aún nadie ha marcado disponibilidad esta semana.</div>';
   }
@@ -2132,7 +2137,7 @@ function renderCalendario(){
   document.getElementById("cal-next").onclick=function(){ state.calOff=(state.calOff||0)+1; renderCalendario(); };
   document.getElementById("cal-hoy").onclick=function(){ state.calOff=0; renderCalendario(); };
   var bs=list.querySelectorAll(".cal-btn");
-  for(var i=0;i<bs.length;i++){ (function(bn){ bn.onclick=function(){ var dk=bn.getAttribute("data-dk"); if(bn.getAttribute("data-a")==="si")clicPuedo(dk); else clicNo(dk); }; })(bs[i]); }
+  for(var i=0;i<bs.length;i++){ (function(bn){ bn.onclick=function(){ var dk=bn.getAttribute("data-dk"), a=bn.getAttribute("data-a"); if(a==="si")clicPuedo(dk); else if(a==="talvez")clicTalvez(dk); else clicNo(dk); }; })(bs[i]); }
   if(!quedadasLoaded)cargarQuedadas();
 }
 function renderGlobal(){
