@@ -1,8 +1,32 @@
   :root{
     --bg:#0e151e; --panel:#15212e; --card:#1d2c3a; --cardh:#243749;
     --text:#c7d5e0; --muted:#7f95a8; --accent:#66c0f4; --accent2:#2a6a8f;
-    --gold:#f0c33c; --green:#a4d007; --line:#2b3d4f;
+    --gold:#f0c33c; --green:#a4d007; --line:#2b3d4f; --red:#e05a5a;
   }
+  /* ===== Feedback de guardado (#savestatus) ===== */
+  #savestatus{font-size:12px;min-width:74px;color:var(--muted);display:inline-flex;align-items:center;gap:5px;transition:color .2s;}
+  #savestatus.ss-saving{color:var(--muted);}
+  #savestatus.ss-saving::before{content:"";width:11px;height:11px;flex:0 0 auto;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:ssspin .7s linear infinite;}
+  #savestatus.ss-ok{color:var(--green);animation:sspop .42s ease;}
+  #savestatus.ss-err{color:var(--red);font-weight:600;animation:sshake .34s ease;}
+  @keyframes ssspin{to{transform:rotate(360deg);}}
+  @keyframes sspop{0%{transform:scale(.72);opacity:.4;}55%{transform:scale(1.13);}100%{transform:scale(1);opacity:1;}}
+  @keyframes sshake{0%,100%{transform:translateX(0);}25%{transform:translateX(-3px);}75%{transform:translateX(3px);}}
+  /* ===== Apuestas: pasos rápidos + historial ===== */
+  .duelo-steps{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;}
+  .duelo-steps .duelo-step{flex:1 1 auto;min-width:44px;padding:5px 6px;font-size:12px;font-weight:600;}
+  .duelo-steps .duelo-step.neg{color:#ffb3b3;}
+  .duelo-histh{font-size:13px;font-weight:700;color:var(--gold);margin:14px 0 7px;border-top:1px solid var(--line);padding-top:12px;}
+  .duelo-card.cerr{opacity:.92;}
+  .duelo-card.cerr .duelo-est{color:var(--muted);}
+  .duelo-hist-more{margin-top:6px;width:100%;font-size:12.5px;}
+  /* ===== Inventario: plegar + arrastrar a contenedores ===== */
+  .inv-cont-tg{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 5px 0 0;line-height:1;}
+  .inv-cont-tg:hover{color:var(--accent);}
+  .inv-cont-count{font-size:11px;color:var(--muted);}
+  .inv-row[draggable="true"]{cursor:grab;}
+  .inv-row.dragging{opacity:.45;}
+  .inv-cont.dropover{outline:2px dashed var(--accent);outline-offset:-2px;background:#1c3242;}
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
