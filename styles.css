@@ -819,6 +819,17 @@
   .cal-mini-c.hoy{outline:2px solid var(--accent);outline-offset:-2px;font-weight:700;}
   .cal-mini-c.wk{box-shadow:0 0 0 1px var(--gold) inset;}
   .cal-mini-c.h1{background:#234016;} .cal-mini-c.h2{background:#2d5417;} .cal-mini-c.h3{background:#3c6e18;} .cal-mini-c.h4{background:#4d8a1a;color:#0c1308;font-weight:700;}
+  .cal-discord-btn{margin-left:auto;background:#3a2a5e;border-color:#5b46a0;color:#cfc2ff;}
+  /* ===== Panel de avisos de Discord ===== */
+  .disc-row{display:flex;align-items:center;gap:8px;font-size:13.5px;margin:9px 0;cursor:pointer;}
+  .disc-row input{flex:0 0 auto;}
+  .disc-field{margin:11px 0;}
+  .disc-field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px;}
+  .disc-field .prop-in{width:100%;}
+  .disc-opt{color:var(--muted);font-weight:400;}
+  .disc-status{margin:11px 0;padding:8px 11px;background:var(--card);border:1px solid var(--line);border-radius:9px;font-size:13px;}
+  .disc-actions{display:flex;gap:8px;margin:14px 0 6px;}
+  .disc-help{font-size:11.5px;color:var(--muted);line-height:1.5;background:#0f1c27;border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-top:6px;}
   @media(max-width:600px){
     .cal-wrap{grid-template-columns:1fr;}
     .cal-side{order:-1;}
