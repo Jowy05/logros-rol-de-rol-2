@@ -300,7 +300,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=62; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=63; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -2231,6 +2231,7 @@ function renderCalendario(){
 // ====== DISCORD (avisos por webhook, por campaña) ======
 var discordSentLocal={}; // claves ya gestionadas en ESTE cliente (evita re-consultar Firebase cada tick)
 var SESION_HORA=14; // hora (local) a partir de la cual se envía el aviso "¡Hoy hay sesión!" el día elegido
+var RECORD_HORA=14; // hora (local) a la que sale el recordatorio diario "faltan por votar"
 // "Ha votado" esta semana: tiene plantilla habitual O al menos una marca explícita esta semana.
 function haVotado(m){ var a=QAUTO[m]; if(a&&Object.keys(a).length)return true; var ds=diasSemana(0); for(var i=0;i<ds.length;i++){ if(esExplicito(dkey(ds[i]),m))return true; } return false; }
 function votacionSemana(){ var si=MIEMBROS.filter(haVotado), no=MIEMBROS.filter(function(m){return !haVotado(m);}); return {si:si,no:no,total:MIEMBROS.length}; }
@@ -2251,31 +2252,43 @@ function claimDiscord(sub){
     return fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({t:new Date().toISOString(),by:currentUser})}).then(function(r2){ return {known:true,claimed:!!r2.ok}; });
   }).catch(function(){ return {known:false,claimed:false}; });
 }
-// Evalúa la semana y envía (si toca) el mensaje de "todos votaron" (1×/sem) o el recordatorio (1×/día). Lo corren TODOS los clientes; el flag evita duplicados.
-// Se llama SOLO en eventos de uso (entrarCampana, votar, cargar quedadas) — NUNCA desde el sondeo de fondo, para no disparar a las 3am al cruzar medianoche con la pestaña abierta. El recordatorio sigue siendo 1×/día (clave por fecha) pero solo cuando alguien usa la app.
-function discordCheck(){
-  if(!currentCamp||!quedadasLoaded)return;
-  discordSesion(); // aviso "¡hoy hay sesión!" (independiente del resto; se autogestiona)
-  var c=(campInfo&&campInfo.discord)||{};
-  if(!c.on||!c.webhook||!MIEMBROS.length)return;
-  var v=votacionSemana(), completo=(v.no.length===0);
-  if(completo){ if(c.avisoCompleto===false)return; } else { if(c.avisoRecord===false)return; }
-  var key=completo?("c/"+dkey(lunesDeSemana(0))):("r/"+dkey(new Date()));
+// Boilerplate anti-duplicado compartido por todos los avisos automáticos: reclama el flag (idempotente vía Firebase) y, si lo gana ESTE cliente, manda el mensaje. Candado síncrono + jitter para que dos clientes no colisionen; si el webhook falla, libera el flag para reintentar (no se pierde el aviso).
+function enviarAvisoDiscord(c,key,msg){
   if(discordSentLocal[key])return;
   discordSentLocal[key]=true; // candado SÍNCRONO intra-cliente
-  var msg;
-  if(completo){ var top=topDias(0); msg=rolTag(c)+"✅ ¡Ya habéis votado **todos** la disponibilidad de esta semana!"+(top.length?(" El día con más gente es **"+DIAS_SEM[(top[0].d.getDay()+6)%7]+" "+top[0].d.getDate()+"** ("+top[0].n+"/"+v.total+"). ¡A cuadrar sesión!"):""); }
-  else { msg=textoRecord(c,v); }
   setTimeout(function(){ // jitter para que dos clientes no reclamen exactamente a la vez
     claimDiscord(key).then(function(res){
       if(!res.known){ discordSentLocal[key]=false; return; } // error de red contra Firebase → reintento
       if(!res.claimed)return;                                 // otro cliente ya lo reclamó/envió
       discordPost(c,msg).then(function(sent){
         if(sent){ pruneDiscord(); }
-        else { fetch(FB+"/campanas/"+currentCamp+"/info/discordSent/"+key+".json",{method:"DELETE"}).catch(function(){}); discordSentLocal[key]=false; } // el webhook falló → libero el flag para reintentar (no se pierde el aviso)
+        else { fetch(FB+"/campanas/"+currentCamp+"/info/discordSent/"+key+".json",{method:"DELETE"}).catch(function(){}); discordSentLocal[key]=false; }
       });
     });
   }, Math.floor(Math.random()*900));
+}
+// Avisos por evento de uso. discordSesion y discordRecordatorio tienen su PROPIA puerta horaria (>=14:00) y además se disparan desde liveTick (fondo). Aquí solo queda "todos votaron", que es instantáneo en cuanto se completa la votación (sin hora).
+function discordCheck(){
+  if(!currentCamp||!quedadasLoaded)return;
+  discordSesion();        // "¡hoy hay sesión!" (puerta 14:00; se autogestiona)
+  discordRecordatorio();  // "faltan por votar" (puerta 14:00; se autogestiona)
+  var c=(campInfo&&campInfo.discord)||{};
+  if(!c.on||!c.webhook||!MIEMBROS.length)return;
+  if(c.avisoCompleto===false)return;
+  var v=votacionSemana(); if(v.no.length>0)return; // si falta gente, lo gestiona discordRecordatorio
+  var top=topDias(0);
+  var msg=rolTag(c)+"✅ ¡Ya habéis votado **todos** la disponibilidad de esta semana!"+(top.length?(" El día con más gente es **"+DIAS_SEM[(top[0].d.getDay()+6)%7]+" "+top[0].d.getDate()+"** ("+top[0].n+"/"+v.total+"). ¡A cuadrar sesión!"):"");
+  enviarAvisoDiscord(c, "c/"+dkey(lunesDeSemana(0)), msg);
+}
+// "Faltan por votar X": recordatorio diario con puerta horaria a las RECORD_HORA (14:00) → sale a esa hora aunque nadie abra la app (se llama también desde liveTick). 1×/día (clave r/<fecha>). Anclado a hora>=RECORD_HORA, así que nunca dispara de madrugada.
+function discordRecordatorio(){
+  if(!currentCamp||!quedadasLoaded)return;
+  var c=(campInfo&&campInfo.discord)||{};
+  if(!c.on||!c.webhook||!MIEMBROS.length)return;
+  if(c.avisoRecord===false)return;
+  var ahora=new Date(); if(ahora.getHours()<RECORD_HORA)return; // aún no es la hora del recordatorio
+  var v=votacionSemana(); if(v.no.length===0)return;            // ya votaron todos → no hay a quién recordar
+  enviarAvisoDiscord(c, "r/"+dkey(ahora), textoRecord(c,v));
 }
 // "¡Hoy hay sesión!": cuando han votado TODOS y hay un día TOP-1 claro (estrictamente por encima del 2º), avisa el PROPIO día a partir de las SESION_HORA (1×/día). Idempotente vía /info/discordSent/s/<fecha>.
 // Seguro desde el sondeo de fondo: está anclado a hora>=SESION_HORA del día concreto, así que no dispara de madrugada al cruzar medianoche con la pestaña abierta.
@@ -2291,20 +2304,8 @@ function discordSesion(){
   if(top.length>1 && top[0].pts<=top[1].pts)return;                 // empate en el #1 → no hay top-1 claro
   var hoy=dkey(ahora);
   if(top[0].dk!==hoy)return;                                        // el día con más gente no es hoy
-  var key="s/"+hoy;
-  if(discordSentLocal[key])return;
-  discordSentLocal[key]=true; // candado SÍNCRONO intra-cliente
   var msg=rolTag(c)+"🎲 **¡Hoy hay sesión!** Es el día con más gente disponible ("+top[0].n+"/"+v.total+"). ¡Nos vemos esta tarde!";
-  setTimeout(function(){ // jitter para que dos clientes no reclamen exactamente a la vez
-    claimDiscord(key).then(function(res){
-      if(!res.known){ discordSentLocal[key]=false; return; } // error de red contra Firebase → reintento
-      if(!res.claimed)return;                                 // otro cliente ya lo reclamó/envió
-      discordPost(c,msg).then(function(sent){
-        if(sent){ pruneDiscord(); }
-        else { fetch(FB+"/campanas/"+currentCamp+"/info/discordSent/"+key+".json",{method:"DELETE"}).catch(function(){}); discordSentLocal[key]=false; } // el webhook falló → libero el flag para reintentar
-      });
-    });
-  }, Math.floor(Math.random()*900));
+  enviarAvisoDiscord(c, "s/"+hoy, msg);
 }
 // Poda los flags antiguos para que /info/discordSent no crezca sin fin.
 function pruneDiscord(){
@@ -2322,7 +2323,7 @@ function renderDiscordPanel(){
   html+='<div class="disc-field"><label>URL del webhook</label><input class="prop-in" id="disc-wh" placeholder="https://discord.com/api/webhooks/..." value="'+esc(c.webhook||"")+'"></div>';
   html+='<div class="disc-field"><label>ID del rol a pinguear <span class="disc-opt">(opcional)</span></label><input class="prop-in" id="disc-rol" placeholder="123456789012345678" value="'+esc(c.rolId||"")+'"></div>';
   html+='<label class="disc-row"><input type="checkbox" id="disc-comp"'+(c.avisoCompleto!==false?" checked":"")+'> Avisar cuando hayan votado <b>todos</b> (1×/semana)</label>';
-  html+='<label class="disc-row"><input type="checkbox" id="disc-rec"'+(c.avisoRecord!==false?" checked":"")+'> <b>Recordatorio diario</b> mientras falte gente (1×/día)</label>';
+  html+='<label class="disc-row"><input type="checkbox" id="disc-rec"'+(c.avisoRecord!==false?" checked":"")+'> <b>Recordatorio diario</b> mientras falte gente, a las '+RECORD_HORA+':00 (1×/día)</label>';
   html+='<label class="disc-row"><input type="checkbox" id="disc-ses"'+(c.avisoSesion!==false?" checked":"")+'> Aviso <b>«¡Hoy hay sesión!»</b> el día con más gente, a las '+SESION_HORA+':00 (1×/día)</label>';
   if(v)html+='<div class="disc-status">Esta semana: <b>'+v.si.length+'/'+v.total+'</b> han votado'+(v.no.length?('. Faltan: '+esc(v.no.join(", "))):' — ¡todos! ✅')+'</div>';
   html+='<div class="disc-actions"><button class="btn dm" id="disc-save" type="button">💾 Guardar</button><button class="btn" id="disc-record" type="button">🗳️ Enviar recordatorio</button><button class="btn" id="disc-test" type="button">📨 Enviar prueba</button></div>';
@@ -2410,7 +2411,7 @@ function startLive(){ stopLive(); liveN=0; liveTimer=setInterval(liveTick,5000);
 function stopLive(){ if(liveTimer){clearInterval(liveTimer);liveTimer=null;} if(duelTimer){clearTimeout(duelTimer);duelTimer=null;} DUELOS={}; QUEDADAS={}; QAUTO={}; quedadasLoaded=false; quedadaPend={}; discordSentLocal={}; var av=document.getElementById("duelo-aviso"); if(av)av.classList.remove("show"); }
 function repintarLive(changed){ if(!changed)return; var y=window.scrollY; renderEdicto(); renderTabs(); renderList(); renderGlobal(); if(document.getElementById("cadenas-modal").classList.contains("open"))renderCadenas(); window.scrollTo(0,y); }
 function liveTick(){
-  discordSesion(); // ANTES de los guards: el aviso "¡hoy hay sesión!" debe poder dispararse a las 14:00 aunque la pestaña esté en segundo plano o el DM esté en modo edición
+  discordSesion(); discordRecordatorio(); // ANTES de los guards: los avisos con puerta horaria (14:00) deben poder dispararse aunque la pestaña esté en segundo plano o el DM esté en modo edición
   if(!currentCamp||document.hidden||liveBusy||editMode)return;
   if(document.getElementById("app").style.display==="none")return;
   liveBusy=true; liveN++;
