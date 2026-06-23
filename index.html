@@ -300,7 +300,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=61; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=62; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -738,7 +738,7 @@ function show(which){
 }
 
 // ====== PERFIL ======
-var miPerfilFoto=null, perfilLogros=[], perfilUser=null, miNivelCuenta=1, pendingLogroSlug=null, perfilVolverA=null, miProfileRaw=null;
+var miPerfilFoto=null, perfilLogros=[], perfilUser=null, miNivelCuenta=1, pendingLogroSlug=null, pendingTab=null, perfilVolverA=null, miProfileRaw=null;
 function avatarChip(){ var mc=marcoNivel(miNivelCuenta),cls=mc?(" mn-"+mc):""; return miPerfilFoto?('<img class="avatar-sm'+cls+'" src="'+miPerfilFoto+'" alt="">'):('<span class="avatar-ini'+cls+'">'+esc((currentUser||"?").charAt(0).toUpperCase())+'</span>'); }
 function updateWhoami(){
   var base='<span class="who-name">'+esc(currentUser)+'</span>';
@@ -1251,6 +1251,7 @@ function entrarCampana(id){
     DUELOS=(c.info&&c.info.duelos)||{}; duelState.view=null;
     QUEDADAS=(c.info&&c.info.quedadas)||{}; QAUTO=(c.info&&c.info.quedadasAuto)||{}; quedadasLoaded=true; quedadaPend={};
     state.tab="grupo";state.sub="todos";state.invSub=(c.info.miembros&&c.info.miembros[currentUser])?currentUser:"__general__"; // abre el inventario en TU sección (no en General), así General sí sale como destino de traspaso
+    if(pendingTab){ if(["grupo","ind","inv","cal","mj","prop"].indexOf(pendingTab)>=0)state.tab=pendingTab; pendingTab=null; } // deep-link a una pestaña concreta (p.ej. #t=cal abre el calendario)
     document.getElementById("camp-nombre").textContent=esc(c.info.nombre||id);
     document.getElementById("camp-rol").textContent="Tú: "+currentUser+" ("+rolDe(currentUser)+")";
     updateWhoami();
@@ -2229,10 +2230,13 @@ function renderCalendario(){
 }
 // ====== DISCORD (avisos por webhook, por campaña) ======
 var discordSentLocal={}; // claves ya gestionadas en ESTE cliente (evita re-consultar Firebase cada tick)
+var SESION_HORA=14; // hora (local) a partir de la cual se envía el aviso "¡Hoy hay sesión!" el día elegido
 // "Ha votado" esta semana: tiene plantilla habitual O al menos una marca explícita esta semana.
 function haVotado(m){ var a=QAUTO[m]; if(a&&Object.keys(a).length)return true; var ds=diasSemana(0); for(var i=0;i<ds.length;i++){ if(esExplicito(dkey(ds[i]),m))return true; } return false; }
 function votacionSemana(){ var si=MIEMBROS.filter(haVotado), no=MIEMBROS.filter(function(m){return !haVotado(m);}); return {si:si,no:no,total:MIEMBROS.length}; }
 function rolTag(c){ return c.rolId?("<@&"+c.rolId+"> "):""; }
+// Texto del recordatorio "faltan por votar" (compartido por el envío automático y el botón manual del DM). Incluye link directo al calendario de la campaña.
+function textoRecord(c,v){ var calLink=location.origin+location.pathname+"#c="+encodeURIComponent(currentCamp)+"&t=cal"; return rolTag(c)+"🗳️ Disponibilidad de la semana: **"+v.si.length+"/"+v.total+"** han votado. Faltan por votar: **"+v.no.join(", ")+"**. Marcad vuestros días aquí 👉 <"+calLink+"> ¡gracias! 🙏"; }
 // Envía al webhook. allowed_mentions: parse:[] (no @everyone/@here ni menciones automáticas) + roles:[rolId] → SOLO pinguea ese rol; los nombres van en texto plano y NO notifican.
 function discordPost(c,content){
   if(!c||!c.webhook)return Promise.resolve(false);
@@ -2251,6 +2255,7 @@ function claimDiscord(sub){
 // Se llama SOLO en eventos de uso (entrarCampana, votar, cargar quedadas) — NUNCA desde el sondeo de fondo, para no disparar a las 3am al cruzar medianoche con la pestaña abierta. El recordatorio sigue siendo 1×/día (clave por fecha) pero solo cuando alguien usa la app.
 function discordCheck(){
   if(!currentCamp||!quedadasLoaded)return;
+  discordSesion(); // aviso "¡hoy hay sesión!" (independiente del resto; se autogestiona)
   var c=(campInfo&&campInfo.discord)||{};
   if(!c.on||!c.webhook||!MIEMBROS.length)return;
   var v=votacionSemana(), completo=(v.no.length===0);
@@ -2260,7 +2265,7 @@ function discordCheck(){
   discordSentLocal[key]=true; // candado SÍNCRONO intra-cliente
   var msg;
   if(completo){ var top=topDias(0); msg=rolTag(c)+"✅ ¡Ya habéis votado **todos** la disponibilidad de esta semana!"+(top.length?(" El día con más gente es **"+DIAS_SEM[(top[0].d.getDay()+6)%7]+" "+top[0].d.getDate()+"** ("+top[0].n+"/"+v.total+"). ¡A cuadrar sesión!"):""); }
-  else { msg=rolTag(c)+"🗳️ Disponibilidad de la semana: **"+v.si.length+"/"+v.total+"** han votado. Faltan por votar: **"+v.no.join(", ")+"**. Marcad vuestros días para poder cuadrar la sesión, ¡gracias! 🙏"; }
+  else { msg=textoRecord(c,v); }
   setTimeout(function(){ // jitter para que dos clientes no reclamen exactamente a la vez
     claimDiscord(key).then(function(res){
       if(!res.known){ discordSentLocal[key]=false; return; } // error de red contra Firebase → reintento
@@ -2272,36 +2277,67 @@ function discordCheck(){
     });
   }, Math.floor(Math.random()*900));
 }
+// "¡Hoy hay sesión!": cuando han votado TODOS y hay un día TOP-1 claro (estrictamente por encima del 2º), avisa el PROPIO día a partir de las SESION_HORA (1×/día). Idempotente vía /info/discordSent/s/<fecha>.
+// Seguro desde el sondeo de fondo: está anclado a hora>=SESION_HORA del día concreto, así que no dispara de madrugada al cruzar medianoche con la pestaña abierta.
+function discordSesion(){
+  if(!currentCamp||!quedadasLoaded)return;
+  var c=(campInfo&&campInfo.discord)||{};
+  if(!c.on||!c.webhook||!MIEMBROS.length)return;
+  if(c.avisoSesion===false)return;
+  var ahora=new Date(); if(ahora.getHours()<SESION_HORA)return;     // aún no es la hora del aviso
+  var v=votacionSemana(); if(v.no.length>0)return;                  // todavía falta gente por votar
+  var top=topDias(0);
+  if(!top.length)return;                                            // nadie puede ningún día
+  if(top.length>1 && top[0].pts<=top[1].pts)return;                 // empate en el #1 → no hay top-1 claro
+  var hoy=dkey(ahora);
+  if(top[0].dk!==hoy)return;                                        // el día con más gente no es hoy
+  var key="s/"+hoy;
+  if(discordSentLocal[key])return;
+  discordSentLocal[key]=true; // candado SÍNCRONO intra-cliente
+  var msg=rolTag(c)+"🎲 **¡Hoy hay sesión!** Es el día con más gente disponible ("+top[0].n+"/"+v.total+"). ¡Nos vemos esta tarde!";
+  setTimeout(function(){ // jitter para que dos clientes no reclamen exactamente a la vez
+    claimDiscord(key).then(function(res){
+      if(!res.known){ discordSentLocal[key]=false; return; } // error de red contra Firebase → reintento
+      if(!res.claimed)return;                                 // otro cliente ya lo reclamó/envió
+      discordPost(c,msg).then(function(sent){
+        if(sent){ pruneDiscord(); }
+        else { fetch(FB+"/campanas/"+currentCamp+"/info/discordSent/"+key+".json",{method:"DELETE"}).catch(function(){}); discordSentLocal[key]=false; } // el webhook falló → libero el flag para reintentar
+      });
+    });
+  }, Math.floor(Math.random()*900));
+}
 // Poda los flags antiguos para que /info/discordSent no crezca sin fin.
 function pruneDiscord(){
   fetch(FB+"/campanas/"+currentCamp+"/info/discordSent.json?x="+(new Date().getTime())).then(function(r){return r.ok?r.json():null;}).then(function(o){
     if(!o)return; var hoy=new Date(); hoy.setHours(0,0,0,0);
-    ["r","c"].forEach(function(g){ var lim=(g==="r")?21:60, gr=o[g]||{}; Object.keys(gr).forEach(function(k){ var p=k.split("-"); if(p.length===3){ var d=new Date(+p[0],(+p[1])-1,+p[2]); if((hoy-d)/86400000>lim){ fetch(FB+"/campanas/"+currentCamp+"/info/discordSent/"+g+"/"+encodeURIComponent(k)+".json",{method:"DELETE"}).catch(function(){}); } } }); });
+    ["r","c","s"].forEach(function(g){ var lim=(g==="r")?21:(g==="s"?14:60), gr=o[g]||{}; Object.keys(gr).forEach(function(k){ var p=k.split("-"); if(p.length===3){ var d=new Date(+p[0],(+p[1])-1,+p[2]); if((hoy-d)/86400000>lim){ fetch(FB+"/campanas/"+currentCamp+"/info/discordSent/"+g+"/"+encodeURIComponent(k)+".json",{method:"DELETE"}).catch(function(){}); } } }); });
   }).catch(function(){});
 }
 function openDiscord(){ if(!esGM(campInfo))return; document.getElementById("discord-modal").classList.add("open"); renderDiscordPanel(); }
 function renderDiscordPanel(){
   var body=document.getElementById("discord-body"); if(!body)return;
   var c=(campInfo&&campInfo.discord)||{}, v=quedadasLoaded?votacionSemana():null;
-  var html='<p class="prop-intro">Conecta <b>esta campaña</b> con un canal de Discord por <b>webhook</b>. Cuando vote todo el grupo (o cada día que falte gente) se manda un aviso pingueando al rol que indiques. Los nombres salen en texto, sin notificar; <b>solo se pinguea el rol</b>.</p>';
+  var html='<p class="prop-intro">Conecta <b>esta campaña</b> con un canal de Discord por <b>webhook</b>. Se manda un aviso pingueando al rol que indiques cuando vote todo el grupo, cada día que falte gente, y el propio día de la sesión a las '+SESION_HORA+':00. Los nombres salen en texto, sin notificar; <b>solo se pinguea el rol</b>.</p>';
   html+='<label class="disc-row"><input type="checkbox" id="disc-on"'+(c.on?" checked":"")+'> <b>Activar avisos de Discord</b></label>';
   html+='<div class="disc-field"><label>URL del webhook</label><input class="prop-in" id="disc-wh" placeholder="https://discord.com/api/webhooks/..." value="'+esc(c.webhook||"")+'"></div>';
   html+='<div class="disc-field"><label>ID del rol a pinguear <span class="disc-opt">(opcional)</span></label><input class="prop-in" id="disc-rol" placeholder="123456789012345678" value="'+esc(c.rolId||"")+'"></div>';
   html+='<label class="disc-row"><input type="checkbox" id="disc-comp"'+(c.avisoCompleto!==false?" checked":"")+'> Avisar cuando hayan votado <b>todos</b> (1×/semana)</label>';
   html+='<label class="disc-row"><input type="checkbox" id="disc-rec"'+(c.avisoRecord!==false?" checked":"")+'> <b>Recordatorio diario</b> mientras falte gente (1×/día)</label>';
+  html+='<label class="disc-row"><input type="checkbox" id="disc-ses"'+(c.avisoSesion!==false?" checked":"")+'> Aviso <b>«¡Hoy hay sesión!»</b> el día con más gente, a las '+SESION_HORA+':00 (1×/día)</label>';
   if(v)html+='<div class="disc-status">Esta semana: <b>'+v.si.length+'/'+v.total+'</b> han votado'+(v.no.length?('. Faltan: '+esc(v.no.join(", "))):' — ¡todos! ✅')+'</div>';
-  html+='<div class="disc-actions"><button class="btn dm" id="disc-save" type="button">💾 Guardar</button><button class="btn" id="disc-test" type="button">📨 Enviar prueba</button></div>';
+  html+='<div class="disc-actions"><button class="btn dm" id="disc-save" type="button">💾 Guardar</button><button class="btn" id="disc-record" type="button">🗳️ Enviar recordatorio</button><button class="btn" id="disc-test" type="button">📨 Enviar prueba</button></div>';
   html+='<div class="disc-msg" id="disc-msg" aria-live="polite"></div>';
   html+='<div class="disc-help">📋 <b>Webhook</b>: en Discord → Ajustes del canal → Integraciones → Webhooks → Nuevo webhook → Copiar URL.<br>🔖 <b>ID del rol</b>: Ajustes de usuario → Avanzado → Modo desarrollador; luego clic derecho en el rol → Copiar ID.<br>⚠️ La URL del webhook es como una llave de ese canal: usa un canal poco sensible.</div>';
   body.innerHTML=html;
   document.getElementById("disc-save").onclick=saveDiscord;
+  document.getElementById("disc-record").onclick=discordEnviarRecord;
   document.getElementById("disc-test").onclick=discordTest;
 }
 function discMsg(t,kind){ var m=document.getElementById("disc-msg"); if(!m)return; m.textContent=t||""; m.className="disc-msg"+(kind?(" "+kind):""); }
 function saveDiscord(){
   if(!esGM(campInfo))return;
   var btn=document.getElementById("disc-save");
-  var cfg={ on:document.getElementById("disc-on").checked, webhook:(document.getElementById("disc-wh").value||"").trim(), rolId:(document.getElementById("disc-rol").value||"").replace(/[^0-9]/g,""), avisoCompleto:document.getElementById("disc-comp").checked, avisoRecord:document.getElementById("disc-rec").checked };
+  var cfg={ on:document.getElementById("disc-on").checked, webhook:(document.getElementById("disc-wh").value||"").trim(), rolId:(document.getElementById("disc-rol").value||"").replace(/[^0-9]/g,""), avisoCompleto:document.getElementById("disc-comp").checked, avisoRecord:document.getElementById("disc-rec").checked, avisoSesion:document.getElementById("disc-ses").checked };
   if(btn)btn.disabled=true; discMsg("Guardando…","saving"); setStatus("Guardando…");
   fetch(FB+"/campanas/"+currentCamp+"/info/discord.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(cfg)}).then(function(r){
     if(btn)btn.disabled=false;
@@ -2314,6 +2350,18 @@ function discordTest(){
   if(!wh){ discMsg("⚠ Pon primero la URL del webhook arriba.","err"); return; }
   var btn=document.getElementById("disc-test"); if(btn)btn.disabled=true; discMsg("Enviando prueba…","saving"); setStatus("Enviando prueba…");
   discordPost({webhook:wh,rolId:rol}, (rol?("<@&"+rol+"> "):"")+"📢 Prueba desde la app de logros de **"+(campInfo&&campInfo.nombre||currentCamp)+"**. ¡Conexión correcta! ✅").then(function(ok){ if(btn)btn.disabled=false; discMsg(ok?"✅ ¡Prueba enviada! Compruébalo en el canal de Discord.":"⚠ No se pudo enviar. Revisa que la URL del webhook esté completa y sea correcta.", ok?"ok":"err"); setStatus(ok?"✓ Enviado":"⚠ Falló"); });
+}
+// Botón del DM: envía AL INSTANTE el recordatorio "faltan por votar" (usa el webhook/rol del formulario, como la prueba). No toca los flags 1×/día del envío automático, así que se puede mandar las veces que haga falta.
+function discordEnviarRecord(){
+  if(!esGM(campInfo))return;
+  var wh=(document.getElementById("disc-wh").value||"").trim(), rol=(document.getElementById("disc-rol").value||"").replace(/[^0-9]/g,"");
+  if(!wh){ discMsg("⚠ Pon primero la URL del webhook arriba.","err"); return; }
+  if(!quedadasLoaded){ discMsg("⚠ Aún se está cargando la disponibilidad; prueba en un momento.","err"); return; }
+  var v=votacionSemana();
+  if(!v.total){ discMsg("⚠ No hay jugadores en la campaña.","err"); return; }
+  if(v.no.length===0){ discMsg("✅ Ya han votado todos; no hay a quién recordar.","ok"); return; }
+  var btn=document.getElementById("disc-record"); if(btn)btn.disabled=true; discMsg("Enviando recordatorio…","saving"); setStatus("Enviando…");
+  discordPost({webhook:wh,rolId:rol}, textoRecord({rolId:rol},v)).then(function(ok){ if(btn)btn.disabled=false; discMsg(ok?("✅ Recordatorio enviado. Faltaban: "+v.no.join(", ")):"⚠ No se pudo enviar. Revisa que la URL del webhook sea correcta.", ok?"ok":"err"); setStatus(ok?"✓ Enviado":"⚠ Falló"); });
 }
 function renderGlobal(){
   var s=stats(LOGROS);
@@ -2362,6 +2410,7 @@ function startLive(){ stopLive(); liveN=0; liveTimer=setInterval(liveTick,5000);
 function stopLive(){ if(liveTimer){clearInterval(liveTimer);liveTimer=null;} if(duelTimer){clearTimeout(duelTimer);duelTimer=null;} DUELOS={}; QUEDADAS={}; QAUTO={}; quedadasLoaded=false; quedadaPend={}; discordSentLocal={}; var av=document.getElementById("duelo-aviso"); if(av)av.classList.remove("show"); }
 function repintarLive(changed){ if(!changed)return; var y=window.scrollY; renderEdicto(); renderTabs(); renderList(); renderGlobal(); if(document.getElementById("cadenas-modal").classList.contains("open"))renderCadenas(); window.scrollTo(0,y); }
 function liveTick(){
+  discordSesion(); // ANTES de los guards: el aviso "¡hoy hay sesión!" debe poder dispararse a las 14:00 aunque la pestaña esté en segundo plano o el DM esté en modo edición
   if(!currentCamp||document.hidden||liveBusy||editMode)return;
   if(document.getElementById("app").style.display==="none")return;
   liveBusy=true; liveN++;
@@ -3035,8 +3084,8 @@ function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reloa
     var sess="";try{sess=localStorage.getItem(SESSION)||"";}catch(e){}
     if(sess&&Object.prototype.hasOwnProperty.call(USERS,sess)){
       startSession(sess);
-      var h=location.hash||"", mc=h.match(/[#&]c=([^&]+)/), ml=h.match(/[#&]l=([^&]+)/);
-      if(mc&&ml){ pendingLogroSlug=decodeURIComponent(ml[1]); var cid=decodeURIComponent(mc[1]); setTimeout(function(){entrarCampana(cid);},400); }
+      var h=location.hash||"", mc=h.match(/[#&]c=([^&]+)/), ml=h.match(/[#&]l=([^&]+)/), mtb=h.match(/[#&]t=([^&]+)/);
+      if(mc){ if(ml)pendingLogroSlug=decodeURIComponent(ml[1]); if(mtb)pendingTab=decodeURIComponent(mtb[1]); var cid=decodeURIComponent(mc[1]); setTimeout(function(){entrarCampana(cid);},400); } // #c=campaña (opcionalmente &l=logro o &t=cal)
     } else show("login");
   });
 })();
