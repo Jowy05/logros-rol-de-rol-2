@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>RolCampaingAwardSystem</title>
-<link rel="stylesheet" href="styles.css?v=43">
+<link rel="stylesheet" href="styles.css?v=44">
 </head>
 <body>
 
@@ -226,6 +226,15 @@
     <div class="modal-body" id="progreso-body"></div>
   </div>
 </div>
+<div class="modal" id="discord-modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>📢 Avisos de Discord</h2>
+      <button class="btn" id="discord-close" type="button">✕ Cerrar</button>
+    </div>
+    <div class="modal-body" id="discord-body"></div>
+  </div>
+</div>
 
 <div class="modal" id="jug-modal">
   <div class="modal-card">
@@ -291,7 +300,7 @@ const FB="https://logrospathfinder-default-rtdb.europe-west1.firebasedatabase.ap
 // Usuarios: se cargan de Firebase /usuarios; SEED es solo respaldo si no hay conexión.
 var USERS={}, ROL={};
 var vistaJugador=false; // el Owner puede "verse" como jugador normal (temporal)
-var APP_VER=59; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
+var APP_VER=60; // versión de la app; se compara con /appver en Firebase para auto-recargar si hay una más nueva
 var miTitulo=null; // título equipado del usuario actual {t,r}
 const SEED_USERS={
   "Joel":{pass:"0e787cb4a5551b4fa26a02c56715301abe14cb628688296f7172d69572254d7b",rol:"owner"},
@@ -1245,7 +1254,7 @@ function entrarCampana(id){
     document.getElementById("camp-nombre").textContent=esc(c.info.nombre||id);
     document.getElementById("camp-rol").textContent="Tú: "+currentUser+" ("+rolDe(currentUser)+")";
     updateWhoami();
-    show("app");setStatus("");render();startLive();
+    show("app");setStatus("");render();startLive();discordCheck();
     if(pendingLogroSlug){var pl=LOGROS.find(function(x){return slug(x.nombre)===pendingLogroSlug;});pendingLogroSlug=null;if(pl)setTimeout(function(){openLogroDetalle(pl);},250);}
   }).catch(function(){alert("No se pudo cargar la campaña.");});
 }
@@ -2107,7 +2116,7 @@ function setQuedada(dk,val){
   if(!QUEDADAS[dk])QUEDADAS[dk]={};
   if(val)QUEDADAS[dk][currentUser]=val; else { delete QUEDADAS[dk][currentUser]; if(!Object.keys(QUEDADAS[dk]).length)delete QUEDADAS[dk]; }
   quedadaPend[dk]=val||""; // valor ESPERADO ("si"/"no"/""): el guard se mantiene hasta que un snapshot lo confirme (no al responder el PUT) → evita reversión por carrera
-  var y=window.scrollY; renderCalendario(); window.scrollTo(0,y);
+  var y=window.scrollY; renderCalendario(); window.scrollTo(0,y); discordCheck();
   var url=FB+"/campanas/"+currentCamp+"/info/quedadas/"+dk+"/"+encodeURIComponent(currentUser)+".json";
   var req=val?fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(val)}):fetch(url,{method:"DELETE"});
   req.then(function(r){ if(r.ok)setStatus("✓ Guardado"); else { setStatus("⚠ Error"); delete quedadaPend[dk]; } }).catch(function(){ setStatus("⚠ Sin conexión"); delete quedadaPend[dk]; }); // si falla, suelto el guard para reconciliar con el servidor
@@ -2134,7 +2143,7 @@ function setAuto(wd,val){
   setStatus("Guardando…");
   if(!QAUTO[currentUser])QAUTO[currentUser]={};
   if(val)QAUTO[currentUser][wd]=val; else { delete QAUTO[currentUser][wd]; if(!Object.keys(QAUTO[currentUser]).length)delete QAUTO[currentUser]; }
-  var y=window.scrollY; renderCalendario(); window.scrollTo(0,y);
+  var y=window.scrollY; renderCalendario(); window.scrollTo(0,y); discordCheck();
   var url=FB+"/campanas/"+currentCamp+"/info/quedadasAuto/"+encodeURIComponent(currentUser)+"/"+wd+".json";
   var req=val?fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(val)}):fetch(url,{method:"DELETE"});
   req.then(function(r){ setStatus(r.ok?"✓ Guardado":"⚠ Error"); }).catch(function(){ setStatus("⚠ Sin conexión"); });
@@ -2161,12 +2170,12 @@ function miniMes(off){
 function cargarQuedadas(){ var t=new Date().getTime(); Promise.all([
     fetch(FB+"/campanas/"+currentCamp+"/info/quedadas.json?x="+t).then(function(r){return r.ok?r.json():{};}).catch(function(){return {};}),
     fetch(FB+"/campanas/"+currentCamp+"/info/quedadasAuto.json?x="+t).then(function(r){return r.ok?r.json():{};}).catch(function(){return {};})
-  ]).then(function(a){ QUEDADAS=a[0]||{}; QAUTO=a[1]||{}; quedadasLoaded=true; if(state.tab==="cal")renderCalendario(); }); }
+  ]).then(function(a){ QUEDADAS=a[0]||{}; QAUTO=a[1]||{}; quedadasLoaded=true; if(state.tab==="cal")renderCalendario(); discordCheck(); }); }
 function renderCalendario(){
   var list=document.getElementById("list");
   var off=state.calOff||0, dias=diasSemana(off), hoy=dkey(new Date()), total=MIEMBROS.length, marcar=puedeMarcarQuedada();
   var html='<div class="cal-wrap"><div class="cal-main">';
-  html+='<div class="cal-nav"><button class="btn" id="cal-prev" type="button">◀</button><button class="btn" id="cal-hoy" type="button">📍 Hoy</button><button class="btn" id="cal-next" type="button">▶</button><span class="cal-rango">'+esc(fmtRango(dias[0],dias[6]))+'</span></div>';
+  html+='<div class="cal-nav"><button class="btn" id="cal-prev" type="button">◀</button><button class="btn" id="cal-hoy" type="button">📍 Hoy</button><button class="btn" id="cal-next" type="button">▶</button><span class="cal-rango">'+esc(fmtRango(dias[0],dias[6]))+'</span>'+(esGM(campInfo)?'<button class="btn cal-discord-btn" id="cal-discord" type="button" title="Avisos de Discord">📢 Discord</button>':'')+'</div>';
   if(marcar){
     var mia=QAUTO[currentUser]||{}, aOpen=!!state.calAutoOpen;
     html+='<div class="cal-auto"><button class="cal-auto-h" id="cal-auto-tg" type="button">🔁 Mi disponibilidad habitual <span class="cal-auto-car">'+(aOpen?"▾":"▸")+'</span></button>';
@@ -2215,7 +2224,76 @@ function renderCalendario(){
   var atg=document.getElementById("cal-auto-tg"); if(atg)atg.onclick=function(){ state.calAutoOpen=!state.calAutoOpen; renderCalendario(); };
   var abs=list.querySelectorAll(".cal-abtn"); for(var ai=0;ai<abs.length;ai++){ (function(bn){ bn.onclick=function(){ clicAuto(+bn.getAttribute("data-wd"), bn.getAttribute("data-a")); }; })(abs[ai]); }
   var mcs=list.querySelectorAll(".cal-mini-c"); for(var mi=0;mi<mcs.length;mi++){ (function(bn){ bn.onclick=function(){ state.calOff=semanaDe(bn.getAttribute("data-dk")); renderCalendario(); }; })(mcs[mi]); }
-  if(!quedadasLoaded)cargarQuedadas();
+  var dbtn=document.getElementById("cal-discord"); if(dbtn)dbtn.onclick=openDiscord;
+  if(!quedadasLoaded)cargarQuedadas(); else discordCheck();
+}
+// ====== DISCORD (avisos por webhook, por campaña) ======
+var discordSentLocal={}; // claves ya gestionadas en ESTE cliente (evita re-consultar Firebase cada tick)
+// "Ha votado" esta semana: tiene plantilla habitual O al menos una marca explícita esta semana.
+function haVotado(m){ var a=QAUTO[m]; if(a&&Object.keys(a).length)return true; var ds=diasSemana(0); for(var i=0;i<ds.length;i++){ if(esExplicito(dkey(ds[i]),m))return true; } return false; }
+function votacionSemana(){ var si=MIEMBROS.filter(haVotado), no=MIEMBROS.filter(function(m){return !haVotado(m);}); return {si:si,no:no,total:MIEMBROS.length}; }
+function rolTag(c){ return c.rolId?("<@&"+c.rolId+"> "):""; }
+// Envía al webhook. allowed_mentions: parse:[] (no @everyone/@here ni menciones automáticas) + roles:[rolId] → SOLO pinguea ese rol; los nombres van en texto plano y NO notifican.
+function discordPost(c,content){
+  if(!c||!c.webhook)return Promise.resolve(false);
+  var body={content:String(content).slice(0,1900), allowed_mentions:{parse:[], roles:(c.rolId?[String(c.rolId)]:[])}};
+  return fetch(c.webhook,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(function(r){return r.ok;}).catch(function(){return false;});
+}
+// Reclama un flag de envío (1 mensaje por semana/día) de forma idempotente. Devuelve {known,claimed}.
+function claimDiscord(sub){
+  var url=FB+"/campanas/"+currentCamp+"/info/discordSent/"+sub+".json";
+  return fetch(url+"?x="+(new Date().getTime())).then(function(r){ if(!r.ok)throw 0; return r.json(); }).then(function(val){
+    if(val)return {known:true,claimed:false};
+    return fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({t:new Date().toISOString(),by:currentUser})}).then(function(r2){ return {known:true,claimed:!!r2.ok}; });
+  }).catch(function(){ return {known:false,claimed:false}; });
+}
+// Evalúa la semana y envía (si toca) el mensaje de "todos votaron" (1×/sem) o el recordatorio (1×/día). Lo corren TODOS los clientes; el flag evita duplicados.
+function discordCheck(){
+  if(!currentCamp||!quedadasLoaded)return;
+  var c=(campInfo&&campInfo.discord)||{};
+  if(!c.on||!c.webhook||!MIEMBROS.length)return;
+  var v=votacionSemana(), completo=(v.no.length===0);
+  if(completo){ if(c.avisoCompleto===false)return; } else { if(c.avisoRecord===false)return; }
+  var key=completo?("c/"+dkey(lunesDeSemana(0))):("r/"+dkey(new Date()));
+  if(discordSentLocal[key])return;
+  discordSentLocal[key]=true; // candado SÍNCRONO: dos discordCheck() seguidos (entrarCampana+render) no reenvían antes de que resuelva la reclamación
+  claimDiscord(key).then(function(res){
+    if(!res.known)discordSentLocal[key]=false; // error de red → permitir reintento
+    if(!res.claimed)return;
+    var msg;
+    if(completo){ var top=topDias(0); msg=rolTag(c)+"✅ ¡Ya habéis votado **todos** la disponibilidad de esta semana!"+(top.length?(" El día con más gente es **"+DIAS_SEM[(top[0].d.getDay()+6)%7]+" "+top[0].d.getDate()+"** ("+top[0].n+"/"+v.total+"). ¡A cuadrar sesión!"):""); }
+    else { msg=rolTag(c)+"🗳️ Disponibilidad de la semana: **"+v.si.length+"/"+v.total+"** han votado. Faltan por votar: **"+v.no.join(", ")+"**. Marcad vuestros días para poder cuadrar la sesión, ¡gracias! 🙏"; }
+    discordPost(c,msg);
+  });
+}
+function openDiscord(){ if(!esGM(campInfo))return; document.getElementById("discord-modal").classList.add("open"); renderDiscordPanel(); }
+function renderDiscordPanel(){
+  var body=document.getElementById("discord-body"); if(!body)return;
+  var c=(campInfo&&campInfo.discord)||{}, v=quedadasLoaded?votacionSemana():null;
+  var html='<p class="prop-intro">Conecta <b>esta campaña</b> con un canal de Discord por <b>webhook</b>. Cuando vote todo el grupo (o cada día que falte gente) se manda un aviso pingueando al rol que indiques. Los nombres salen en texto, sin notificar; <b>solo se pinguea el rol</b>.</p>';
+  html+='<label class="disc-row"><input type="checkbox" id="disc-on"'+(c.on?" checked":"")+'> <b>Activar avisos de Discord</b></label>';
+  html+='<div class="disc-field"><label>URL del webhook</label><input class="prop-in" id="disc-wh" placeholder="https://discord.com/api/webhooks/..." value="'+esc(c.webhook||"")+'"></div>';
+  html+='<div class="disc-field"><label>ID del rol a pinguear <span class="disc-opt">(opcional)</span></label><input class="prop-in" id="disc-rol" placeholder="123456789012345678" value="'+esc(c.rolId||"")+'"></div>';
+  html+='<label class="disc-row"><input type="checkbox" id="disc-comp"'+(c.avisoCompleto!==false?" checked":"")+'> Avisar cuando hayan votado <b>todos</b> (1×/semana)</label>';
+  html+='<label class="disc-row"><input type="checkbox" id="disc-rec"'+(c.avisoRecord!==false?" checked":"")+'> <b>Recordatorio diario</b> mientras falte gente (1×/día)</label>';
+  if(v)html+='<div class="disc-status">Esta semana: <b>'+v.si.length+'/'+v.total+'</b> han votado'+(v.no.length?('. Faltan: '+esc(v.no.join(", "))):' — ¡todos! ✅')+'</div>';
+  html+='<div class="disc-actions"><button class="btn dm" id="disc-save" type="button">💾 Guardar</button><button class="btn" id="disc-test" type="button">📨 Enviar prueba</button></div>';
+  html+='<div class="disc-help">📋 <b>Webhook</b>: en Discord → Ajustes del canal → Integraciones → Webhooks → Nuevo webhook → Copiar URL.<br>🔖 <b>ID del rol</b>: Ajustes de usuario → Avanzado → Modo desarrollador; luego clic derecho en el rol → Copiar ID.<br>⚠️ La URL del webhook es como una llave de ese canal: usa un canal poco sensible.</div>';
+  body.innerHTML=html;
+  document.getElementById("disc-save").onclick=saveDiscord;
+  document.getElementById("disc-test").onclick=discordTest;
+}
+function saveDiscord(){
+  if(!esGM(campInfo))return;
+  var cfg={ on:document.getElementById("disc-on").checked, webhook:(document.getElementById("disc-wh").value||"").trim(), rolId:(document.getElementById("disc-rol").value||"").replace(/[^0-9]/g,""), avisoCompleto:document.getElementById("disc-comp").checked, avisoRecord:document.getElementById("disc-rec").checked };
+  setStatus("Guardando…");
+  fetch(FB+"/campanas/"+currentCamp+"/info/discord.json",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(cfg)}).then(function(r){ if(r.ok){ campInfo.discord=cfg; logEvento("📢 configuró avisos de Discord",""); setStatus("✓ Guardado"); renderDiscordPanel(); discordCheck(); } else setStatus("⚠ Error"); }).catch(function(){ setStatus("⚠ Sin conexión"); });
+}
+function discordTest(){
+  var wh=(document.getElementById("disc-wh").value||"").trim(), rol=(document.getElementById("disc-rol").value||"").replace(/[^0-9]/g,"");
+  if(!wh){ alert("Pon primero la URL del webhook."); return; }
+  setStatus("Enviando prueba…");
+  discordPost({webhook:wh,rolId:rol}, (rol?("<@&"+rol+"> "):"")+"📢 Prueba desde la app de logros de **"+(campInfo&&campInfo.nombre||currentCamp)+"**. ¡Conexión correcta! ✅").then(function(ok){ setStatus(ok?"✓ Enviado":"⚠ Falló el envío"); if(!ok)alert("No se pudo enviar al webhook. Revisa que la URL sea correcta y completa."); });
 }
 function renderGlobal(){
   var s=stats(LOGROS);
@@ -2261,7 +2339,7 @@ function refrescarCampana(){
 // Refresco en vivo: relee solo el progreso de la campaña cada 5 s y repinta si cambió (sin recargar ni molestar).
 var liveTimer=null, liveBusy=false, liveN=0, duelTimer=null;
 function startLive(){ stopLive(); liveN=0; liveTimer=setInterval(liveTick,5000); duelLoop(); }
-function stopLive(){ if(liveTimer){clearInterval(liveTimer);liveTimer=null;} if(duelTimer){clearTimeout(duelTimer);duelTimer=null;} DUELOS={}; QUEDADAS={}; QAUTO={}; quedadasLoaded=false; quedadaPend={}; var av=document.getElementById("duelo-aviso"); if(av)av.classList.remove("show"); }
+function stopLive(){ if(liveTimer){clearInterval(liveTimer);liveTimer=null;} if(duelTimer){clearTimeout(duelTimer);duelTimer=null;} DUELOS={}; QUEDADAS={}; QAUTO={}; quedadasLoaded=false; quedadaPend={}; discordSentLocal={}; var av=document.getElementById("duelo-aviso"); if(av)av.classList.remove("show"); }
 function repintarLive(changed){ if(!changed)return; var y=window.scrollY; renderEdicto(); renderTabs(); renderList(); renderGlobal(); if(document.getElementById("cadenas-modal").classList.contains("open"))renderCadenas(); window.scrollTo(0,y); }
 function liveTick(){
   if(!currentCamp||document.hidden||liveBusy||editMode)return;
@@ -2278,8 +2356,8 @@ function liveTick(){
     if(full && inf!==undefined && inf){
       var verNueva=inf.logrosVer||0, verVieja=(campInfo&&campInfo.logrosVer)||0;
       // comparar sin 'duelos' (datos en vivo, los gestiona duelosTick) para no repintar la lista a cada rato
-      var infCmp=Object.assign({},inf); delete infCmp.duelos; delete infCmp.quedadas;
-      var oldCmp=Object.assign({},campInfo||{}); delete oldCmp.duelos; delete oldCmp.quedadas;
+      var infCmp=Object.assign({},inf); delete infCmp.duelos; delete infCmp.quedadas; delete infCmp.discordSent;
+      var oldCmp=Object.assign({},campInfo||{}); delete oldCmp.duelos; delete oldCmp.quedadas; delete oldCmp.discordSent;
       if(JSON.stringify(infCmp)!==JSON.stringify(oldCmp)){ campInfo=inf; GMname=inf.gm||""; MIEMBROS=ordenMiembros(inf.miembros).filter(function(m){return m!==GMname;}); changed=true; }
       if(verNueva!==verVieja)bajarLogros=true; // solo se descarga /logros (pesado) si su versión cambió
       // Frescura: si NO estamos en la pestaña cal (qIdx<0), aprovecha el /info ya bajado para mantener QUEDADAS al día (así entrar en cal muestra datos frescos, no de hace 5s).
@@ -2293,6 +2371,7 @@ function liveTick(){
         repintarLive(changed);
       }).catch(function(){ liveBusy=false; repintarLive(changed); });
     } else { liveBusy=false; repintarLive(changed); }
+    discordCheck();
   }).catch(function(){liveBusy=false;});
 }
 
@@ -2905,6 +2984,8 @@ function logout(){try{localStorage.removeItem(SESSION);}catch(e){}location.reloa
   document.getElementById("icono-input").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];if(f){if(pendingTituloImg){cambiarImagenTitulo(f);pendingTituloImg=false;}else if(pendingItemImg){cambiarImagenItem(f,pendingItemImg.sec,pendingItemImg.id);pendingItemImg=null;}else if(pendingPjIcon){cambiarIconoPJ(f,pendingPjIcon);pendingPjIcon=null;}else cambiarIconoLogro(f);}e.target.value="";});
   document.getElementById("titulo-close").addEventListener("click",closeTitulo);
   document.getElementById("titulo-modal").addEventListener("click",function(e){if(e.target.id==="titulo-modal")closeTitulo();});
+  document.getElementById("discord-close").addEventListener("click",function(){document.getElementById("discord-modal").classList.remove("open");});
+  document.getElementById("discord-modal").addEventListener("click",function(e){if(e.target.id==="discord-modal")document.getElementById("discord-modal").classList.remove("open");});
   document.getElementById("perfil-titulo-btn").addEventListener("click",function(){openDarTitulo(perfilUser);});
   document.getElementById("backup-input").addEventListener("change",function(e){if(e.target.files&&e.target.files[0])importarTodo(e.target.files[0]);e.target.value="";});
   document.getElementById("cuentas-btn").addEventListener("click",openCuentas);
